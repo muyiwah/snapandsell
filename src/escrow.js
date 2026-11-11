@@ -97,7 +97,7 @@ function waybillSvg({ tracking, name, country, from }) {
   const bars = Array.from({ length: 28 }, (_, i) => `<rect x="${18 + i * 11.5}" y="150" width="${(i * 7) % 3 === 0 ? 7 : 3}" height="46" fill="#111"/>`).join('');
   return Buffer.from(`<svg width="380" height="215" xmlns="http://www.w3.org/2000/svg">
   <rect width="380" height="215" fill="#fdfdf8" stroke="#222" stroke-width="3"/>
-  <text x="16" y="34" font-family="Arial" font-weight="bold" font-size="21">GIG LOGISTICS · WAYBILL</text>
+  <text x="16" y="34" font-family="Arial" font-weight="bold" font-size="21">SWIFTLINE COURIER · WAYBILL</text>
   <text x="16" y="70" font-family="Arial" font-size="19">Tracking: ${escXml(tracking)}</text>
   <text x="16" y="102" font-family="Arial" font-size="16">To: ${escXml(name)}, ${escXml(country)}</text>
   <text x="16" y="128" font-family="Arial" font-size="16">From: ${escXml(from)}</text>
@@ -122,7 +122,8 @@ export async function sampleParcel(orderId, kind = 'genuine') {
   const item = await loadImageJpeg(itemPath);
   if (!item) throw Object.assign(new Error('No photo available for a sample parcel.'), { status: 400 });
   const rotated = await sharp(item).rotate(kind === 'swap' ? 6 : -8, { background: '#b98a55' }).resize(620, 620, { fit: 'inside' }).modulate({ brightness: 0.93 }).toBuffer();
-  const tracking = `GIG-${String(parseInt(order.id.replace(/\W/g, '').slice(-6), 36) % 1e8).padStart(8, '4')}`;
+  // Fictional courier for sample photos (no real brands).
+  const tracking = `SWL-${String(parseInt(order.id.replace(/\W/g, '').slice(-6), 36) % 1e8).padStart(8, '4')}`;
   return sharp({ create: { width: 1000, height: 900, channels: 3, background: '#b98a55' } })
     .composite([
       { input: rotated, left: 40, top: 50 },
