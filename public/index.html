@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Snap &amp; Sell</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main>
+  <div class="eyebrow">For small sellers in Nigeria</div>
+  <h1>Sell abroad. Get paid with PayPal. Be trusted.</h1>
+  <p class="lead">Snap one photo and AI writes your listing and a fair dollar price. Buyers, and their AI agents, can haggle and pay with PayPal. PayPal holds the money until AI checks that your parcel matches the listing, so strangers abroad can trust you from your first sale.</p>
+
+  <div class="steps"><span class="step on" id="s1">1 · Snap</span><span class="step" id="s2">2 · Review</span><span class="step" id="s3">3 · Share &amp; get paid</span></div>
+
+  <div class="grid2">
+    <section class="card">
+      <h3>Your product photo</h3>
+      <label class="drop" id="drop" for="photo">
+        <div id="dropText"><div class="big">📷</div><b>Tap to take or upload a photo</b><div class="hint">JPG or PNG, up to 8 MB</div></div>
+        <img id="preview" class="hidden" alt="Product preview" />
+      </label>
+      <input id="photo" type="file" accept="image/*" capture="environment" class="hidden" />
+      <label for="notes">Anything the photo can't show? (optional)</label>
+      <input id="notes" type="text" maxlength="300" placeholder="e.g. size 45 cm, hand-dyed, made in Abeokuta" />
+      <div class="btns"><button class="btn btn-primary" id="draftBtn" disabled>Write my listing with AI</button></div>
+      <div id="draftErr" class="err hidden"></div>
+    </section>
+
+    <section class="card" id="formCard">
+      <div id="placeholder" class="hint" style="padding:40px 0;text-align:center">Your AI-written listing appears here. You can edit everything before publishing.</div>
+      <form id="form" class="hidden">
+        <h3>Review your listing</h3>
+        <div id="aiNote" class="ai-note"></div>
+        <label for="title">Title</label><input id="title" type="text" required maxlength="90" />
+        <label for="description">Description</label><textarea id="description" required maxlength="600"></textarea>
+        <div class="row">
+          <div><label for="price">Price (USD)</label><input id="price" type="number" min="1" step="0.5" required /></div>
+          <div><label for="stock">How many in stock</label><input id="stock" type="number" min="1" value="1" required /></div>
+        </div>
+        <div class="row">
+          <div><label for="category">Category</label>
+            <select id="category"><option>Fashion</option><option>Accessories</option><option>Home</option><option>Beauty</option><option>Food &amp; Spices</option><option>Art &amp; Craft</option><option>Electronics</option><option>Other</option></select></div>
+          <div><label for="condition">Condition</label>
+            <select id="condition"><option value="new">New</option><option value="handmade">Handmade</option><option value="used">Used</option></select></div>
+        </div>
+        <label for="tags">Search tags (comma separated)</label><input id="tags" type="text" />
+        <div class="row">
+          <div><label for="floor">Lowest price you'd accept (private)</label><input id="floor" type="number" min="1" step="0.5" /></div>
+          <div><label style="display:flex;gap:8px;align-items:center;margin-top:38px;font-weight:500"><input id="negotiable" type="checkbox" checked style="width:auto" /> Let buyers' AI agents haggle</label></div>
+        </div>
+        <div class="hint">Your haggling agent never goes below this price and never reveals it.</div>
+        <div class="row">
+          <div><label for="sellerName">Shop name</label><input id="sellerName" type="text" maxlength="60" placeholder="Your shop name" /></div>
+          <div><label for="sellerCity">City</label><input id="sellerCity" type="text" maxlength="60" value="Lagos, Nigeria" /></div>
+        </div>
+        <div class="btns"><button class="btn btn-gold" id="publishBtn" type="submit">Publish &amp; get my PayPal link</button></div>
+        <div id="pubErr" class="err hidden"></div>
+      </form>
+
+      <div id="done" class="success hidden">
+        <div class="eyebrow">Live</div>
+        <h2>Ready to sell worldwide</h2>
+        <p class="hint">Buyers pay with PayPal and the money is held for you until you ship. AI shopping agents can find and haggle for this item too.</p>
+        <img class="qr" id="qr" alt="QR code for the product checkout page" />
+        <div class="linkbox"><input id="link" type="text" readonly /><button class="btn btn-ghost" id="copy" type="button">Copy</button></div>
+        <div class="btns" style="justify-content:center">
+          <a class="btn btn-wa" id="wa" target="_blank" rel="noopener">Share on WhatsApp</a>
+          <a class="btn btn-primary" id="open">Open checkout page</a>
+          <button class="btn btn-ghost" id="again" type="button">List another</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+<footer>Built for the PayPal AI Hackathon · PayPal sandbox only · Demo sellers are fictional</footer>
+
+<script type="module">
+import { $, api, header, usd, esc } from '/common.js';
+header('sell');
+
+let file = null, imagePath = null, draft = null;
+
+$('#photo').addEventListener('change', (e) => {
+  file = e.target.files[0];
+  if (!file) return;
+  $('#preview').src = URL.createObjectURL(file);
+  $('#preview').classList.remove('hidden');
+  $('#dropText').classList.add('hidden');
+  $('#draftBtn').disabled = false;
+});
+
+$('#draftBtn').addEventListener('click', async () => {
+  const btn = $('#draftBtn');
+  $('#draftErr').classList.add('hidden');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Muse Spark is reading your photo…';
+  try {
+    const fd = new FormData();
+    fd.append('photo', file);
+    fd.append('notes', $('#notes').value);
+    const res = await api('/api/listings/draft', { method: 'POST', body: fd });
+    draft = res.draft; imagePath = res.image;
+    $('#title').value = draft.title;
+    $('#description').value = draft.description;
+    $('#price').value = draft.priceUsd;
+    $('#floor').value = Math.round(draft.priceUsd * 0.85 * 2) / 2;
+    $('#category').value = draft.category;
+    $('#condition').value = draft.condition;
+    $('#tags').value = (draft.tags || []).join(', ');
+    const conf = Math.round((draft.confidence ?? 0) * 100);
+    $('#aiNote').innerHTML = `<b>AI suggestion · ${esc(draft.model)}</b> · ${(res.ms / 1000).toFixed(1)}s<br>
+      Suggested price ${usd(draft.priceUsd)}: ${esc(draft.priceReasoning)}<br>
+      <span class="pill ${conf >= 70 ? 'ok' : 'warn'}">${conf}% sure what this item is</span> ${conf < 70 ? 'Please check the title and description.' : ''}`;
+    $('#placeholder').classList.add('hidden');
+    $('#form').classList.remove('hidden');
+    $('#s1').className = 'step done'; $('#s2').className = 'step on';
+    $('#title').focus();
+  } catch (e) {
+    $('#draftErr').textContent = e.message;
+    $('#draftErr').classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Write my listing with AI';
+  }
+});
+
+$('#form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('#publishBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Publishing…';
+  $('#pubErr').classList.add('hidden');
+  try {
+    const body = {
+      title: $('#title').value, description: $('#description').value,
+      priceUsd: Number($('#price').value), stock: Number($('#stock').value),
+      category: $('#category').value, condition: $('#condition').value,
+      tags: $('#tags').value.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 10),
+      sellerName: $('#sellerName').value || undefined, sellerCity: $('#sellerCity').value || undefined,
+      whatsappCaption: draft?.whatsappCaption, image: imagePath, aiModel: draft?.model,
+      negotiable: $('#negotiable').checked, floorPriceUsd: Number($('#floor').value) || undefined,
+    };
+    const { product, url } = await api('/api/products', { method: 'POST', body: JSON.stringify(body) });
+    $('#qr').src = `/api/products/${product.id}/qr.png`;
+    $('#link').value = url;
+    $('#open').href = `/p/${product.id}`;
+    const caption = `${draft?.whatsappCaption || product.title} ${usd(product.priceUsd)}. Pay with PayPal: ${url}`;
+    $('#wa').href = `https://wa.me/?text=${encodeURIComponent(caption)}`;
+    $('#form').classList.add('hidden');
+    $('#done').classList.remove('hidden');
+    $('#s2').className = 'step done'; $('#s3').className = 'step on';
+  } catch (err) {
+    $('#pubErr').textContent = err.message;
+    $('#pubErr').classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Publish & get my PayPal link';
+  }
+});
+
+$('#copy').addEventListener('click', () => { navigator.clipboard?.writeText($('#link').value); $('#copy').textContent = 'Copied'; });
+$('#again').addEventListener('click', () => location.reload());
+</script>
+</body>
+</html>

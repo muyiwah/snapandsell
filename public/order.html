@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Your order · Snap &amp; Sell</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main>
+  <div id="root"><div class="spinner dark" style="margin:40px auto"></div></div>
+</main>
+<footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
+<script type="module">
+import { $, api, header, usd, esc, STATUS, verdictHtml } from '/common.js';
+header('store');
+const id = decodeURIComponent(location.pathname.split('/').pop());
+const q = new URLSearchParams(location.search);
+let timer, last;
+
+function steps(o) {
+  const v = o.verifications?.[0];
+  const when = (d) => (d ? new Date(d).toLocaleString() : '');
+  const voided = o.status === 'VOIDED';
+  const list = [
+    { t: 'Checkout created', d: o.channel === 'ai-agent' ? `Started by your AI agent${o.negotiated ? `, price negotiated from ${usd(o.listAmount)} to ${usd(o.amount)}` : ''}` : 'Started on the product page', state: 'done' },
+    { t: 'You approved on PayPal', d: o.heldAt ? when(o.heldAt) : 'Waiting for you to approve', state: o.heldAt ? 'done' : 'now' },
+    { t: 'PayPal is holding your money', d: o.heldAt ? 'The seller is not paid until your parcel is verified.' : '', state: !o.heldAt ? '' : ['HELD', 'FLAGGED'].includes(o.status) ? 'now' : 'done' },
+    { t: 'Seller ships with photo proof', d: v ? `${v.decision === 'release' ? 'Verified' : v.decision === 'reject' ? 'Wrong item detected' : 'Not conclusive'} · ${when(v.at)}` : o.heldAt && !voided ? 'Waiting for the seller' : '', state: !v ? '' : v.decision === 'release' ? 'done' : 'bad' },
+    voided
+      ? { t: 'Cancelled: you were not charged', d: `${o.voidReason || ''} · ${when(o.voidedAt)}`, state: 'done' }
+      : { t: 'Money released to the seller', d: o.capturedAt ? `${when(o.capturedAt)}${o.trackingNumber ? ` · Tracking ${o.trackingNumber} (${o.carrier})${o.trackingAddedToPayPal ? ', added to your PayPal order' : ''}` : ''}` : '', state: o.capturedAt ? 'done' : '' },
+  ];
+  return list.map((s) => `<li class="${s.state}"><span class="dot">${s.state === 'done' ? '✓' : s.state === 'bad' ? '!' : ''}</span><div class="t">${esc(s.t)}</div><div class="d">${esc(s.d)}</div></li>`).join('');
+}
+
+async function load() {
+  try {
+    const { order: o } = await api(`/api/orders/${encodeURIComponent(id)}`);
+    const snap = JSON.stringify(o);
+    if (snap === last) { timer = setTimeout(load, 5000); return; }
+    last = snap;
+    const st = STATUS[o.status] || { label: o.status, cls: '' };
+    const v = o.verifications?.[0];
+    const canCancel = o.status === 'FLAGGED';
+    $('#root').innerHTML = `
+      ${q.get('error') ? `<div class="err" style="margin-bottom:16px">${esc(q.get('error'))}</div>` : ''}
+      ${q.get('new') && o.status === 'HELD' ? `<div class="trust" style="margin:0 0 16px"><span class="ic">🛡️</span><div><b>Approved. PayPal is holding ${usd(o.amount)}.</b> The seller gets paid only after their parcel photo matches this listing. Keep this page to follow your order.</div></div>` : ''}
+      <div class="eyebrow">Order ${esc(o.orderId)}</div>
+      <h1 style="font-size:34px">${esc(o.title)}</h1>
+      <p class="lead" style="margin-bottom:16px"><b>${usd(o.amount)}</b> ${o.negotiated ? `<s class="hint">${usd(o.listAmount)}</s> ` : ''}· <span class="pill ${st.cls}">${esc(st.label)}</span> ${o.channel === 'ai-agent' ? '<span class="pill agent">Bought by AI agent, approved by you</span>' : ''}</p>
+      <div class="grid2">
+        <section class="card">
+          <h3>Where your money is</h3>
+          <ol class="timeline">${steps(o)}</ol>
+          ${canCancel ? `<div class="btns"><button class="btn btn-ghost" id="cancel">Cancel and release my money</button></div><div class="hint">PayPal voids the hold. You are not charged.</div>` : ''}
+          <div class="hint" style="margin-top:12px">Sold by ${esc(o.seller || 'seller')} · ${esc(o.sellerCity || '')}</div>
+        </section>
+        <section class="card">
+          <h3>Proof of shipment</h3>
+          ${v ? verdictHtml(v) : `<div class="compare"><figure><img src="${esc(o.productImage || '')}" alt="Listing photo" /><figcaption>What you paid for</figcaption></figure><figure style="display:grid;place-items:center;border:2px dashed var(--line);border-radius:12px;aspect-ratio:1"><div class="hint" style="text-align:center;padding:12px">The seller's parcel photo will appear here</div></figure></div>
+            <p class="hint">When the seller ships, they photograph the packed item with its waybill. Muse Spark checks it is the same item you paid for before PayPal releases your money.</p>`}
+          ${o.verifications?.length > 1 ? `<details style="margin-top:12px"><summary style="cursor:pointer">Earlier checks (${o.verifications.length - 1})</summary>${o.verifications.slice(1).map(verdictHtml).join('<hr>')}</details>` : ''}
+        </section>
+      </div>`;
+    $('#cancel')?.addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try { await api(`/api/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: JSON.stringify({ by: 'buyer' }) }); load(); }
+      catch (err) { alert(err.message); e.target.disabled = false; }
+    });
+    clearTimeout(timer);
+    if (!['PAID', 'VOIDED'].includes(o.status)) timer = setTimeout(load, 5000);
+  } catch (e) {
+    $('#root').innerHTML = `<div class="card" style="max-width:520px;margin:20px auto"><h2>We couldn't find that order</h2><p class="hint">${esc(e.message)}</p><a href="/store">Back to the store</a></div>`;
+  }
+}
+load();
+</script>
+</body>
+</html>

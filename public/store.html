@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Snap &amp; Sell Store</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main>
+  <div class="eyebrow">Made in Nigeria · Paid with PayPal</div>
+  <h1>The store</h1>
+  <p class="lead">Every item was listed from a single photo. Pay with PayPal or send your AI agent to haggle. Either way, PayPal holds your money until the seller's parcel photo is verified against the listing.</p>
+  <div class="btns" style="margin:-8px 0 20px"><a class="btn btn-ghost" href="/.well-known/agent-store.json" target="_blank">View agent manifest</a><a class="btn btn-primary" href="/agent">Shop with an AI agent</a></div>
+  <div class="products" id="grid"><div class="hint">Loading…</div></div>
+</main>
+<script type="module">
+import { $, api, header, usd, esc } from '/common.js';
+header('store');
+const { products } = await api('/api/products');
+$('#grid').innerHTML = products.length ? products.map((p) => `
+  <a class="pcard" href="/p/${p.id}">
+    <img src="${esc(p.imageUrl ? new URL(p.imageUrl).pathname : '')}" alt="${esc(p.title)}" loading="lazy" />
+    <div class="body"><span class="pill">${esc(p.category)}</span><h3>${esc(p.title)}</h3>
+      <div class="seller">${esc(p.seller)} · ${esc(p.sellerCity)}</div><div class="price">${usd(p.priceUsd)}</div></div>
+  </a>`).join('') : '<div class="hint">No products yet. <a href="/">List the first one</a>.</div>';
+</script>
+</body>
+</html>

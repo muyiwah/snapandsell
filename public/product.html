@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkout · Snap &amp; Sell</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main>
+  <div class="grid2" id="wrap">
+    <div class="card"><img id="img" alt="" style="width:100%;border-radius:12px;aspect-ratio:1;object-fit:cover;background:#efe6d6" /></div>
+    <div class="card">
+      <span class="pill" id="cat"></span>
+      <h1 id="title" style="font-size:32px;margin-top:10px"></h1>
+      <div class="seller" id="seller"></div>
+      <p id="desc"></p>
+      <div style="font:800 34px 'Bricolage Grotesque',sans-serif" id="price"></div>
+      <div class="hint" id="stock"></div>
+      <div id="cancelled" class="err hidden">Payment cancelled. You can try again below.</div>
+      <div class="trust"><span class="ic">🛡️</span><div><b>Your money is held, not sent.</b> PayPal holds your payment and releases it to the seller only after AI checks that their parcel photo matches this listing. Wrong item? Cancel and you're not charged.</div></div>
+      <div style="margin-top:18px" id="pay"></div>
+      <div id="payErr" class="err hidden"></div>
+      <details style="margin-top:18px">
+        <summary style="cursor:pointer;font-weight:600">Share or pay by QR</summary>
+        <img id="qr" alt="QR code" style="width:180px;margin-top:10px;border:1px solid var(--line);border-radius:8px" />
+        <div class="btns"><a class="btn btn-wa" id="wa" target="_blank" rel="noopener">Share on WhatsApp</a></div>
+      </details>
+    </div>
+  </div>
+</main>
+<footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
+<script type="module">
+import { $, api, header, usd, esc, getConfig } from '/common.js';
+header('store');
+const id = location.pathname.split('/').pop();
+const params = new URLSearchParams(location.search);
+if (params.get('cancelled')) $('#cancelled').classList.remove('hidden');
+
+const showErr = (m) => { $('#payErr').textContent = m; $('#payErr').classList.remove('hidden'); };
+
+try {
+  const { product: p } = await api(`/api/products/${id}`);
+  document.title = `${p.title} · Snap & Sell`;
+  $('#img').src = p.imageUrl ? new URL(p.imageUrl).pathname : '';
+  $('#img').alt = p.title;
+  $('#cat').textContent = p.category;
+  $('#title').textContent = p.title;
+  $('#seller').textContent = `Sold by ${p.seller} · ${p.sellerCity}`;
+  $('#desc').textContent = p.description;
+  $('#price').textContent = usd(p.priceUsd);
+  $('#stock').textContent = p.inStock ? `${p.stock} available · ships from Nigeria${p.negotiable ? ' · your AI agent can haggle on this item' : ''}` : 'Sold out';
+  $('#qr').src = `/api/products/${p.id}/qr.png`;
+  $('#wa').href = `https://wa.me/?text=${encodeURIComponent(`${p.title} ${usd(p.priceUsd)}. Pay with PayPal: ${location.origin}/p/${p.id}`)}`;
+
+  if (!p.inStock) {
+    $('#pay').innerHTML = '<div class="pill warn">Sold out</div>';
+  } else {
+    const cfg = await getConfig();
+    if (cfg.paypalClientId) {
+      // Real PayPal JS SDK buttons (sandbox). Order is created and captured on our server.
+      const s = document.createElement('script');
+      s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.paypalClientId)}&currency=${cfg.currency}&intent=authorize&components=buttons&enable-funding=venmo,paylater`;
+      s.onload = () => paypal.Buttons({
+        style: { shape: 'pill', layout: 'vertical' },
+        createOrder: async () => (await api('/api/orders', { method: 'POST', body: JSON.stringify({ productId: p.id }) })).id,
+        onApprove: async (data) => {
+          await api(`/api/orders/${data.orderID}/authorize`, { method: 'POST' });
+          location.href = `/o/${encodeURIComponent(data.orderID)}?new=1`;
+        },
+        onError: (err) => showErr('PayPal could not complete the payment. ' + (err?.message || '')),
+      }).render('#pay');
+      s.onerror = () => showErr('Could not load PayPal. Check your connection and refresh.');
+      document.head.appendChild(s);
+    } else {
+      $('#pay').innerHTML = '<button class="btn btn-pp" id="mockPay" style="width:100%">Pay with PayPal (mock mode)</button>';
+      $('#mockPay').onclick = async () => {
+        try {
+          const o = await api('/api/orders', { method: 'POST', body: JSON.stringify({ productId: p.id, redirect: true }) });
+          location.href = o.approveUrl;
+        } catch (e) { showErr(e.message); }
+      };
+    }
+  }
+} catch (e) {
+  $('#wrap').innerHTML = `<div class="card"><h2>Item not found</h2><p>${esc(e.message)}</p><a href="/store">Back to the store</a></div>`;
+}
+</script>
+</body>
+</html>

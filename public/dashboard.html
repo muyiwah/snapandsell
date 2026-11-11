@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seller dashboard · Snap &amp; Sell</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/vendor/ag-grid-community.min.js"></script>
+  <style>.gridbox { width: 100%; } .gridbox .ag-center-cols-viewport { min-height: 90px; } .ag-theme-quartz { --ag-font-family: Inter, system-ui, sans-serif; --ag-active-color: #0f4c3a; }</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Seller dashboard</div>
+  <h1>Your sales</h1>
+  <p class="lead">Buyers' money is held by PayPal. Ship, photograph the parcel with its waybill, and the money is released to you as soon as the photo matches your listing.</p>
+
+  <div class="kpis">
+    <div class="kpi accent"><div class="v" id="k-held">$0</div><div class="l">Held by PayPal, waiting for you to ship</div></div>
+    <div class="kpi"><div class="v" id="k-rev">$0</div><div class="l">Released to you (paid)</div></div>
+    <div class="kpi"><div class="v" id="k-agent">0</div><div class="l">Orders from AI agents · <span id="k-deals">0</span> deals haggled</div></div>
+    <div class="kpi"><div class="v" id="k-swaps">0</div><div class="l">Wrong-item parcels caught</div></div>
+  </div>
+
+  <section class="card" style="margin-bottom:20px">
+    <h3>Orders</h3>
+    <div id="orders" class="ag-theme-quartz gridbox"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h3>Products</h3>
+      <div id="products" class="ag-theme-quartz gridbox"></div>
+    </section>
+    <section class="card">
+      <h3>Activity</h3>
+      <ul class="feed" id="feed"></ul>
+    </section>
+  </div>
+</main>
+
+<dialog class="sheet" id="ship">
+  <div class="inner">
+    <button class="x" id="shipClose" aria-label="Close">×</button>
+    <div class="eyebrow">Ship &amp; get paid</div>
+    <h2 id="shipTitle"></h2>
+    <p class="hint" id="shipSub"></p>
+    <div id="shipBody">
+      <div class="compare">
+        <figure><img id="shipListing" alt="Listing photo" /><figcaption>Your listing photo</figcaption></figure>
+        <label class="drop" for="parcel" style="min-height:0;aspect-ratio:1;padding:8px" id="parcelDrop">
+          <div id="parcelText"><div class="big">📦</div><b>Photo of the packed item with its waybill</b><div class="hint">Tap to take a photo</div></div>
+          <img id="parcelPreview" class="hidden" alt="Parcel photo" style="max-height:100%;width:100%;object-fit:cover" />
+        </label>
+      </div>
+      <input id="parcel" type="file" accept="image/*" capture="environment" class="hidden" />
+      <div class="btns"><button class="btn btn-gold" id="verify" disabled>Verify &amp; release my money</button></div>
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-weight:600">No parcel to hand? Try a sample photo</summary>
+        <p class="hint">Generates a parcel photo with a waybill addressed to this buyer, so you can test the check.</p>
+        <div class="btns"><button class="btn btn-ghost btn-sm" data-sample="genuine">✓ Correct item</button><button class="btn btn-ghost btn-sm" data-sample="swap">✗ A different item (swap)</button></div>
+      </details>
+    </div>
+    <div id="shipWorking" class="hidden" style="text-align:center;padding:30px 0"><div class="spinner dark" style="margin:0 auto 10px"></div><b>Muse Spark is comparing the parcel with your listing…</b><div class="hint">Checking the item, reading the waybill</div></div>
+    <div id="shipResult"></div>
+    <div id="shipErr" class="err hidden"></div>
+  </div>
+</dialog>
+
+<script type="module">
+import { $, api, header, usd, esc, STATUS, verdictHtml } from '/common.js';
+header('dashboard');
+
+const money = (p) => (p.value == null ? '' : usd(p.value));
+const pill = (text, cls) => { const s = document.createElement('span'); s.className = `pill ${cls}`; s.textContent = text; return s; };
+const statusPill = (p) => { const s = STATUS[p.value] || { label: p.value, cls: '' }; return pill(s.label, s.cls); };
+const channelPill = (p) => pill({ 'ai-agent': 'AI agent', web: 'PayPal button', 'qr-link': 'QR / link' }[p.value] || p.value, p.value === 'ai-agent' ? 'agent' : '');
+const when = (p) => (p.value ? new Date(p.value).toLocaleString() : '');
+const actions = (p) => {
+  const o = p.data;
+  const wrap = document.createElement('div');
+  wrap.style.display = 'flex'; wrap.style.gap = '6px'; wrap.style.alignItems = 'center'; wrap.style.height = '100%';
+  if (o.status === 'HELD' || o.status === 'FLAGGED') {
+    const b = document.createElement('button');
+    b.className = 'btn btn-gold btn-sm';
+    b.textContent = o.status === 'FLAGGED' ? 'Retry proof' : 'Ship & get paid';
+    b.onclick = () => openShip(o);
+    wrap.appendChild(b);
+  }
+  const a = document.createElement('a');
+  a.href = `/o/${encodeURIComponent(o.id)}`; a.target = '_blank'; a.textContent = 'View'; a.className = 'btn btn-ghost btn-sm';
+  wrap.appendChild(a);
+  return wrap;
+};
+
+const ordersGrid = agGrid.createGrid($('#orders'), {
+  columnDefs: [
+    { headerName: '', cellRenderer: actions, width: 200, sortable: false, pinned: 'left' },
+    { field: 'status', headerName: 'Status', cellRenderer: statusPill, width: 150, filter: true },
+    { field: 'productTitle', headerName: 'Product', flex: 1, minWidth: 200 },
+    { field: 'amount', headerName: 'Amount', valueFormatter: money, width: 100 },
+    { field: 'listAmount', headerName: 'List', valueFormatter: money, width: 90 },
+    { field: 'channel', headerName: 'Channel', cellRenderer: channelPill, width: 130, filter: true },
+    { field: 'tracking.trackingNumber', headerName: 'Tracking', width: 150 },
+    { field: 'createdAt', headerName: 'Created', valueFormatter: when, sort: 'desc', width: 175 },
+    { field: 'id', headerName: 'PayPal order', width: 190 },
+  ],
+  defaultColDef: { sortable: true, resizable: true },
+  rowData: [],
+  getRowId: (p) => p.data.id,
+  domLayout: 'autoHeight',
+  overlayNoRowsTemplate: 'No orders yet. Buy something from the store or with the AI agent.',
+});
+
+const productsGrid = agGrid.createGrid($('#products'), {
+  columnDefs: [
+    { field: 'title', headerName: 'Title', flex: 1, minWidth: 180 },
+    { field: 'priceUsd', headerName: 'Price', valueFormatter: money, width: 90 },
+    { headerName: 'Lowest (private)', valueGetter: (p) => (p.data.negotiable === false ? null : p.data.floorPriceUsd ?? Math.round(p.data.priceUsd * 85) / 100), valueFormatter: (p) => (p.value == null ? 'fixed' : usd(p.value)), width: 130 },
+    { field: 'stock', headerName: 'Stock', width: 80 },
+    { field: 'aiModel', headerName: 'Listed by', width: 140 },
+  ],
+  defaultColDef: { sortable: true, resizable: true },
+  rowData: [],
+  getRowId: (p) => p.data.id,
+  domLayout: 'autoHeight',
+});
+
+const agentTag = (e) => (e.channel === 'ai-agent' ? ' <span class="pill agent">AI agent</span>' : '');
+const label = {
+  product_listed: (e) => `Listed <b>${esc(e.title)}</b>`,
+  deal_agreed: (e) => `🤝 Agents agreed <b>${usd(e.amount)}</b> for ${esc(e.productTitle)} <span class="hint">(list ${usd(e.listPriceUsd)})</span>`,
+  order_created: (e) => `Checkout started · ${usd(e.amount)}${agentTag(e)}`,
+  order_held: (e) => `🛡️ <b>${usd(e.amount)} held by PayPal</b> · ${esc(e.productTitle || '')}${agentTag(e)}`,
+  parcel_verified: (e) => `📦 Parcel verified · ${esc(e.productTitle || '')}`,
+  parcel_flagged: (e) => `🛑 Parcel ${e.decision === 'reject' ? '<b>did not match</b>' : 'not conclusive'} · ${esc(e.productTitle || '')}`,
+  order_flagged: () => '',
+  order_paid: (e) => `💸 <b>${usd(e.amount)} released to you</b>${agentTag(e)}`,
+  order_voided: (e) => `Hold cancelled · ${usd(e.amount)} · buyer not charged`,
+  webhook: (e) => `PayPal webhook <code>${esc(e.eventType)}</code>`,
+};
+
+let current = null;
+async function refresh() {
+  const d = await api('/api/dashboard');
+  $('#k-held').textContent = usd(d.stats.heldUsd);
+  $('#k-rev').textContent = usd(d.stats.revenueUsd);
+  $('#k-agent').textContent = d.stats.agentOrders;
+  $('#k-deals').textContent = d.stats.deals;
+  $('#k-swaps').textContent = d.stats.blockedSwaps;
+  ordersGrid.setGridOption('rowData', d.orders);
+  productsGrid.setGridOption('rowData', d.products);
+  $('#feed').innerHTML = d.events.map((e) => [(label[e.type] || ((x) => esc(x.type)))(e), e]).filter(([h]) => h)
+    .map(([h, e]) => `<li><span>${h}</span><span class="hint">${new Date(e.at).toLocaleTimeString()}</span></li>`).join('') || '<li class="hint">Nothing yet.</li>';
+  return d;
+}
+
+// ---------- ship dialog ----------
+let products = [];
+async function openShip(o) {
+  current = o;
+  products = (await api('/api/dashboard')).products;
+  const p = products.find((x) => x.id === o.productId);
+  $('#shipTitle').textContent = o.productTitle;
+  $('#shipSub').textContent = `${usd(o.amount)} held by PayPal${o.shipTo?.name ? ` · ship to ${o.shipTo.name}, ${o.shipTo.countryCode || ''}` : ''}`;
+  $('#shipListing').src = p?.image || '';
+  $('#parcel').value = '';
+  $('#parcelPreview').classList.add('hidden');
+  $('#parcelText').classList.remove('hidden');
+  $('#verify').disabled = true;
+  $('#shipResult').innerHTML = '';
+  $('#shipErr').classList.add('hidden');
+  $('#shipBody').classList.remove('hidden');
+  $('#ship').showModal();
+}
+$('#shipClose').onclick = () => $('#ship').close();
+$('#parcel').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $('#parcelPreview').src = URL.createObjectURL(f);
+  $('#parcelPreview').classList.remove('hidden');
+  $('#parcelText').classList.add('hidden');
+  $('#verify').disabled = false;
+});
+
+async function submit(body) {
+  $('#shipErr').classList.add('hidden');
+  $('#shipBody').classList.add('hidden');
+  $('#shipWorking').classList.remove('hidden');
+  try {
+    const r = await api(`/api/orders/${encodeURIComponent(current.id)}/ship`, { method: 'POST', body });
+    const d = await refresh();
+    const o = d.orders.find((x) => x.id === current.id);
+    const v = o?.verifications?.[0];
+    $('#shipResult').innerHTML = (v ? verdictHtml(v) : '') +
+      (r.decision === 'release' ? `<div class="btns"><button class="btn btn-primary" onclick="document.getElementById('ship').close()">Done</button></div>`
+        : `<div class="btns"><button class="btn btn-gold" id="again">Try another photo</button></div>`);
+    $('#again')?.addEventListener('click', () => openShip(o));
+  } catch (e) {
+    $('#shipErr').textContent = e.message;
+    $('#shipErr').classList.remove('hidden');
+    $('#shipBody').classList.remove('hidden');
+  } finally {
+    $('#shipWorking').classList.add('hidden');
+  }
+}
+$('#verify').onclick = () => { const fd = new FormData(); fd.append('photo', $('#parcel').files[0]); submit(fd); };
+document.querySelectorAll('[data-sample]').forEach((b) => (b.onclick = () => submit(JSON.stringify({ sample: b.dataset.sample }))));
+
+refresh();
+setInterval(() => { if (!$('#ship').open) refresh(); }, 8000);
+</script>
+</body>
+</html>

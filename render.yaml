@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: snap-and-sell
+    runtime: node
+    plan: free  # free tier sleeps when idle; upgrade to "starter" to stay awake during judging
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: META_API_KEY
+        sync: false

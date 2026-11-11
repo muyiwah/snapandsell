@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payment · Snap &amp; Sell</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main>
+  <div class="card success" style="max-width:520px;margin:20px auto" id="box"><div class="spinner dark" style="margin:20px auto"></div></div>
+</main>
+<script type="module">
+import { $, api, header, usd, esc } from '/common.js';
+header('store');
+const q = new URLSearchParams(location.search);
+const id = q.get('order');
+const error = q.get('error');
+try {
+  const { order } = await api(`/api/orders/${encodeURIComponent(id)}`);
+  const paid = order.status === 'COMPLETED';
+  $('#box').innerHTML = paid
+    ? `<div style="font-size:48px">✅</div><h2>Payment received</h2>
+       <p>${esc(order.productTitle)} · <b>${usd(order.amount)} ${esc(order.currency)}</b></p>
+       <p class="hint">PayPal order ${esc(order.id)}${order.channel === 'ai-agent' ? ' · <span class="pill agent">started by an AI agent, approved by you</span>' : ''}</p>
+       <p class="hint">The seller has been notified on their dashboard.</p>
+       <div class="btns" style="justify-content:center"><a class="btn btn-primary" href="/store">Keep shopping</a></div>`
+    : `<h2>Payment not completed</h2><p class="hint">${esc(error || 'Status: ' + order.status)}</p><a class="btn btn-ghost" href="/store">Back to the store</a>`;
+} catch (e) {
+  $('#box').innerHTML = `<h2>We couldn't find that order</h2><p class="hint">${esc(e.message)}</p>`;
+}
+</script>
+</body>
+</html>
