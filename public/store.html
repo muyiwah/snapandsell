@@ -29,21 +29,25 @@ const agent = mountAgent($('#agent'));
 
 const { products } = await api('/api/products');
 $('#grid').innerHTML = products.length ? products.map((p) => `
-  <div class="pcard">
-    <a href="/p/${p.id}" class="pcard-link" aria-label="${esc(p.title)}, ${usd(p.priceUsd)}">
+  <article class="scard">
+    <a href="/p/${p.id}" class="media" tabindex="-1" aria-hidden="true">
       <img src="${esc(p.imageUrl ? new URL(p.imageUrl).pathname : '')}" alt="" loading="lazy" />
+      <span class="badge cat">${esc(p.category)}</span>
+      ${p.negotiable ? '<span class="badge hag">🤝 Haggle-able</span>' : ''}
     </a>
-    <div class="body">
-      <span class="pill">${esc(p.category)}</span>
-      <h3><a href="/p/${p.id}" class="plain">${esc(p.title)}</a></h3>
-      <div class="seller">${esc(p.seller)} · ${esc(p.sellerCity)}</div>
-      <div class="price">${usd(p.priceUsd)}</div>
-      <div class="pactions">
-        <a class="btn btn-pp btn-sm" href="/p/${p.id}">Buy</a>
-        ${p.negotiable ? `<button type="button" class="btn btn-ghost btn-sm" data-haggle="${esc(p.title)}" data-price="${p.priceUsd}">🤝 Haggle with AI</button>` : ''}
+    <div class="info">
+      <h3><a href="/p/${p.id}">${esc(p.title)}</a></h3>
+      <div class="who" title="${esc(p.seller)} · ${esc(p.sellerCity)}">${esc(p.seller)} · ${esc(p.sellerCity)}</div>
+      <div class="pricerow">
+        <span class="amount">${usd(p.priceUsd)}</span>
+        <span class="terms ${p.negotiable ? 'neg' : ''}">${p.negotiable ? 'Negotiable' : 'Fixed price'}</span>
       </div>
     </div>
-  </div>`).join('') : '<div class="hint">No products yet. <a href="/">List the first one</a>.</div>';
+    <div class="acts ${p.negotiable ? '' : 'one'}">
+      <a class="btn btn-pp" href="/p/${p.id}" aria-label="Buy ${esc(p.title)}">Buy</a>
+      ${p.negotiable ? `<button type="button" class="btn btn-ghost" data-haggle="${esc(p.title)}" data-price="${p.priceUsd}" aria-label="Ask the AI agent to haggle for ${esc(p.title)}">🤝 Haggle</button>` : ''}
+    </div>
+  </article>`).join('') : '<div class="hint">No products yet. <a href="/">List the first one</a>.</div>';
 
 $('#grid').addEventListener('click', (e) => {
   const b = e.target.closest('[data-haggle]');
