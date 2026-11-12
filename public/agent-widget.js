@@ -48,6 +48,38 @@ function dealShake(price, list) {
   return el;
 }
 
+/**
+ * Escape a bot message, then turn http(s) URLs into links with readable labels.
+ * Only http(s) is linked; everything else stays escaped text.
+ */
+const URL_RE = /https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
+function linkify(text) {
+  const s = String(text ?? '');
+  let out = '', last = 0;
+  for (const m of s.matchAll(URL_RE)) {
+    out += esc(s.slice(last, m.index)) + linkFor(m[0]);
+    last = m.index + m[0].length;
+  }
+  return out + esc(s.slice(last));
+}
+function linkFor(raw) {
+  {
+    let u;
+    try { u = new URL(raw); } catch { return esc(raw); }
+    if (!/^https?:$/.test(u.protocol)) return esc(raw);
+    const sameSite = u.origin === location.origin;
+    const isPayPal = /(^|\.)paypal\.com$/.test(u.hostname);
+    let label;
+    if (isPayPal && /checkoutnow|webapps|checkout/.test(u.pathname)) label = 'Open PayPal checkout →';
+    else if (sameSite && u.pathname.startsWith('/o/')) label = 'Track your order →';
+    else if (sameSite && u.pathname.startsWith('/p/')) label = 'View the item →';
+    else label = esc((u.hostname + u.pathname).replace(/\/$/, '').slice(0, 48) + ((u.hostname + u.pathname).length > 48 ? '…' : ''));
+    // PayPal and our own pages open here (PayPal returns the buyer to their order); others in a new tab.
+    const newTab = !(sameSite || isPayPal);
+    return `<a class="msg-link${isPayPal ? ' pp' : ''}" href="${esc(u.href)}"${newTab ? ' target="_blank" rel="noopener noreferrer"' : ''}>${label}</a>`;
+  }
+}
+
 export function mountAgent(root) {
   root.innerHTML = `
     <div class="agent-head">
@@ -88,7 +120,8 @@ export function mountAgent(root) {
   function addMsg(role, text) {
     const div = document.createElement('div');
     div.className = `msg ${role === 'user' ? 'user' : 'bot'}`;
-    div.textContent = text;
+    if (role === 'user') div.textContent = text;
+    else div.innerHTML = linkify(text);
     msgs.appendChild(div);
     scroll();
     return div;

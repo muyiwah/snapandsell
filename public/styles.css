@@ -381,3 +381,9 @@ dialog.sheet .x { float: right; background: none; border: 0; font-size: 22px; cu
   .ds-left, .ds-right, .ds-clasp, .ds-ring, .ds-title, .ds-price, .ds-sub, .dealshake { animation: none !important; }
   .ds-confetti { display: none; }
 }
+
+/* Links inside agent messages */
+.msg { overflow-wrap: anywhere; }
+.msg a.msg-link { color: var(--green-2); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+.msg a.msg-link.pp { display: inline-block; margin: 2px 0; padding: 4px 12px; border-radius: 999px; background: #ffc439; color: #111; text-decoration: none; }
+.msg a.msg-link.pp:hover { filter: brightness(1.05); }
