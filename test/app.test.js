@@ -283,6 +283,34 @@ test('seller edits from the grid: floor capped at price, stock 0 marks sold out,
   assert.equal(bad.status, 400);
 });
 
+test('remove a listing: blocked while money is held, then hidden everywhere, then restored', async () => {
+  const choker = await product(/Choker/);
+  // A held order for this item blocks removal.
+  const c = await json('/api/orders', { method: 'POST', body: JSON.stringify({ productId: choker.id, redirect: true }) });
+  c.body.orderId = c.body.id;
+  await json(`/paypal/return?token=${c.body.orderId}`);
+  const blocked = await json(`/api/products/${choker.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'removed' }) });
+  assert.equal(blocked.status, 409);
+  assert.match(blocked.body.error, /still holding money/);
+  await json(`/api/orders/${c.body.orderId}/cancel`, { method: 'POST', body: JSON.stringify({ by: 'seller' }) });
+
+  const removed = await json(`/api/products/${choker.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'removed' }) });
+  assert.equal(removed.status, 200, JSON.stringify(removed.body));
+  assert.equal(removed.body.product.status, 'removed');
+  assert.equal((await json(`/api/products/${choker.id}`)).status, 404, 'public product page gone');
+  assert.ok(!(await json('/api/products')).body.products.some((p) => p.id === choker.id), 'not in the store');
+  assert.ok(!(await json('/api/agent/search?q=choker')).body.products.length, 'not found by agents');
+  const buy = await json('/api/agent/checkout', { method: 'POST', body: JSON.stringify({ product_id: choker.id }) });
+  assert.equal(buy.status, 400, 'agents cannot buy it');
+  const edit = await json(`/api/products/${choker.id}`, { method: 'PATCH', body: JSON.stringify({ priceUsd: 40 }) });
+  assert.equal(edit.status, 400, 'no edits while removed');
+  assert.ok((await json('/api/dashboard')).body.products.some((p) => p.id === choker.id), 'still listed for the seller');
+
+  const restored = await json(`/api/products/${choker.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'active' }) });
+  assert.equal(restored.body.product.status, 'active');
+  assert.equal((await json(`/api/products/${choker.id}`)).status, 200);
+});
+
 test('bad input gets a friendly 400', async () => {
   const r = await json('/api/products', { method: 'POST', body: JSON.stringify({ title: 'x' }) });
   assert.equal(r.status, 400);

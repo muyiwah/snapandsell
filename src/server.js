@@ -119,7 +119,25 @@ app.patch('/api/products/:id', limit(60, 60_000), wrap(async (req, res) => {
     floorPriceUsd: z.coerce.number().positive().max(10000).optional(),
     negotiable: z.boolean().optional(),
     stock: z.coerce.number().int().min(0).max(999).optional(),
+    status: z.enum(['active', 'removed']).optional(),
   }).parse(req.body);
+
+  // Remove (hide) or restore a listing. Orders and their evidence are kept.
+  if (body.status === 'removed') {
+    const open = store.listOrders().filter((o) => o.productId === p.id && ['HELD', 'FLAGGED'].includes(o.status));
+    if (open.length) {
+      return res.status(409).json({ error: `PayPal is still holding money for ${open.length} order${open.length > 1 ? 's' : ''} of this item. Ship or cancel ${open.length > 1 ? 'them' : 'it'} first, then remove the listing.` });
+    }
+    const product = store.updateProduct(p.id, { status: 'removed', removedAt: new Date().toISOString() });
+    store.logEvent('product_removed', { productId: p.id, title: p.title });
+    return res.json({ product });
+  }
+  if (body.status === 'active' && p.status === 'removed') {
+    const product = store.updateProduct(p.id, { status: p.stock > 0 ? 'active' : 'sold_out', removedAt: null });
+    store.logEvent('product_restored', { productId: p.id, title: p.title });
+    return res.json({ product });
+  }
+  if (p.status === 'removed') return res.status(400).json({ error: 'This listing is removed. Restore it before editing.' });
   const price = Math.round((body.priceUsd ?? p.priceUsd) * 100) / 100;
   const patch = { priceUsd: price };
   // The floor can never be above the list price.
@@ -140,6 +158,7 @@ app.get('/api/products', (_req, res) => res.json({ products: store.listProducts(
 app.get('/api/products/:id', (req, res) => {
   const p = store.getProduct(req.params.id);
   if (!p) return res.status(404).json({ error: 'Not found' });
+  if (p.status === 'removed') return res.status(404).json({ error: 'The seller has removed this listing.' });
   res.json({ product: { ...agentTools.publicProduct(p), whatsappCaption: p.whatsappCaption, tags: p.tags, status: p.status, stock: p.stock } });
 });
 

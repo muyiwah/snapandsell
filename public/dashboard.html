@@ -19,6 +19,9 @@
     .row-held { background: #fffaeb !important; }
     .row-paid { background: #f1f8f4 !important; }
     .row-voided { color: #8a8270; }
+    .row-removed { color: #9a927f; background: #f6f2ea !important; }
+    .row-removed [col-id="title"] { text-decoration: line-through; }
+    .btn.danger { color: #8a2412; border-color: #d9583b; }
     .ag-row-pinned { font-weight: 700; background: #f3ecdf !important; }
     .ai { display: inline-flex; gap: 6px; align-items: center; }
     .bar { width: 46px; height: 6px; border-radius: 3px; background: #e6dccb; overflow: hidden; display: inline-block; }
@@ -64,7 +67,7 @@
   <div style="display:flex;flex-direction:column;gap:20px">
     <section class="card">
       <h3>Products</h3>
-      <div class="hint" style="margin:-4px 0 10px">Double-click a price or your private lowest price to edit it. Your haggling agent uses the new floor straight away.</div>
+      <div class="hint" style="margin:-4px 0 10px">Double-click a price or your private lowest price to edit it. Your haggling agent uses the new floor straight away. <b>Remove</b> hides a listing from the store and AI agents; past orders are kept, and you can restore it.</div>
       <div id="products" class="ag-theme-quartz gridbox"></div>
       <div id="prodMsg" class="hint" style="margin-top:8px" aria-live="polite"></div>
     </section>
@@ -220,22 +223,50 @@ $('#exportCsv').addEventListener('click', () => ordersGrid.exportDataAsCsv({
 
 // ---------- products grid: inline editing saved to the server ----------
 const floorOf = (p) => (p.negotiable === false ? null : p.floorPriceUsd ?? Math.round(p.priceUsd * 85) / 100);
+const live = (p) => p.data.status !== 'removed';
+const PRODUCT_STATUS = { active: ['Live', 'ok'], sold_out: ['Sold out', 'warn'], removed: ['Removed', ''] };
+
+async function setListing(product, status) {
+  const msg = $('#prodMsg');
+  if (status === 'removed' && !confirm(`Remove "${product.title}" from the store?\n\nBuyers and AI agents won't see it any more. Past orders stay in your records, and you can restore it later.`)) return;
+  try {
+    const { product: p } = await api(`/api/products/${encodeURIComponent(product.id)}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+    msg.textContent = status === 'removed' ? `Removed ${p.title}. It's hidden from the store and from AI agents.` : `Restored ${p.title}.`;
+    refresh();
+  } catch (err) {
+    msg.textContent = err.message;
+  }
+}
+const listingButton = (p) => {
+  const b = document.createElement('button');
+  const removed = p.data.status === 'removed';
+  b.className = `btn btn-sm ${removed ? 'btn-ghost' : 'btn-ghost danger'}`;
+  b.textContent = removed ? 'Restore' : 'Remove';
+  b.setAttribute('aria-label', `${removed ? 'Restore' : 'Remove'} listing ${p.data.title}`);
+  b.onclick = () => setListing(p.data, removed ? 'active' : 'removed');
+  return b;
+};
+
 const productsGrid = agGrid.createGrid($('#products'), {
   columnDefs: [
-    { field: 'title', headerName: 'Title', flex: 1, minWidth: 220, tooltipField: 'title' },
-    { field: 'sellerName', headerName: 'Shop', width: 200 },
-    { field: 'priceUsd', headerName: 'Price ✎', valueFormatter: money, width: 100, editable: true, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 1, max: 10000, precision: 2 }, enableCellChangeFlash: true },
+    { field: 'title', headerName: 'Title', flex: 2, minWidth: 170, tooltipField: 'title' },
+    { field: 'status', headerName: 'Listing', width: 108, cellRenderer: (p) => { const [l, c] = PRODUCT_STATUS[p.value] || [p.value, '']; return pill(l, c); } },
+    { field: 'sellerName', headerName: 'Shop', flex: 1, minWidth: 130, tooltipField: 'sellerName' },
+    { field: 'priceUsd', headerName: 'Price ✎', valueFormatter: money, width: 100, editable: live, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 1, max: 10000, precision: 2 }, enableCellChangeFlash: true },
     { headerName: 'Lowest (private) ✎', colId: 'floor', valueGetter: (p) => floorOf(p.data), valueFormatter: (p) => (p.value == null ? 'fixed price' : usd(p.value)), width: 175,
-      editable: (p) => p.data.negotiable !== false, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 1, precision: 2 },
+      editable: (p) => live(p) && p.data.negotiable !== false, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 1, precision: 2 },
       valueSetter: (p) => { p.data.floorPriceUsd = Number(p.newValue); return true; }, enableCellChangeFlash: true },
-    { headerName: 'Haggling', colId: 'negotiable', width: 105, editable: true, cellDataType: 'boolean', cellEditor: 'agCheckboxCellEditor', cellRenderer: 'agCheckboxCellRenderer',
+    { headerName: 'Haggling', colId: 'negotiable', width: 98, editable: live, cellDataType: 'boolean', cellEditor: 'agCheckboxCellEditor', cellRenderer: 'agCheckboxCellRenderer',
       valueGetter: (p) => p.data.negotiable !== false, valueSetter: (p) => { p.data.negotiable = Boolean(p.newValue); return true; } },
-    { field: 'stock', headerName: 'Stock', width: 80, editable: true, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 0, max: 999, precision: 0 } },
+    { field: 'stock', headerName: 'Stock', width: 80, editable: live, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 0, max: 999, precision: 0 } },
+    { headerName: '', colId: 'listing', width: 104, cellRenderer: listingButton, sortable: false },
   ],
   defaultColDef: { sortable: true, resizable: true },
   rowData: [],
   getRowId: (p) => p.data.id,
   domLayout: 'autoHeight',
+  rowClassRules: { 'row-removed': (p) => p.data?.status === 'removed' },
+  postSortRows: (params) => { params.nodes.sort((a, b) => (a.data.status === 'removed') - (b.data.status === 'removed')); },
   singleClickEdit: false,
   stopEditingWhenCellsLoseFocus: true,
   onCellValueChanged: async (e) => {
@@ -262,7 +293,9 @@ function applyLayout() {
   ordersGrid.setColumnsPinned(['actions'], phone ? null : 'left');
   ordersGrid.setColumnWidths([{ key: 'actions', newWidth: phone ? 84 : 200 }, { key: 'status', newWidth: phone ? 146 : 150 }, { key: 'ai', newWidth: phone ? 190 : 230 }]);
   ordersGrid.refreshCells({ columns: ['actions'], force: true });
-  productsGrid.setColumnsVisible(['sellerName'], !phone);
+  productsGrid.setColumnsVisible(['sellerName', 'status'], !phone);
+  productsGrid.setColumnsPinned(['listing'], phone ? 'right' : null);
+  productsGrid.setColumnWidths([{ key: 'listing', newWidth: phone ? 118 : 104 }]);
 }
 applyLayout();
 phoneMq.addEventListener('change', applyLayout);
@@ -271,6 +304,8 @@ const agentTag = (e) => (e.channel === 'ai-agent' ? ' <span class="pill agent">A
 const label = {
   product_listed: (e) => `Listed <b>${esc(e.title)}</b>`,
   product_updated: (e) => `✎ Updated <b>${esc(e.title)}</b>`,
+  product_removed: (e) => `🗑 Removed <b>${esc(e.title)}</b> from the store`,
+  product_restored: (e) => `↩︎ Restored <b>${esc(e.title)}</b>`,
   deal_agreed: (e) => `🤝 Agents agreed <b>${usd(e.amount)}</b> for ${esc(e.productTitle)} <span class="hint">(list ${usd(e.listPriceUsd)})</span>`,
   order_created: (e) => `Checkout started · ${usd(e.amount)}${agentTag(e)}`,
   order_held: (e) => `🛡️ <b>${usd(e.amount)} held by PayPal</b> · ${esc(e.productTitle || '')}${agentTag(e)}`,
