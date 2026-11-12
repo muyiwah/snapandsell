@@ -61,6 +61,20 @@ All calls use **Muse Spark** (`muse-spark-1.3`) through the Meta Model **Respons
 
 **The model reports, code decides.** Release needs `sameItem` with confidence ≥ 0.8, a readable tracking number and a recipient that does not contradict PayPal's shipping name. A confident "different item" flags the order. Anything else keeps the money held.
 
+## Seller dashboard (AG Grid)
+
+`/dashboard` is where the seller manages the escrow. It's built with AG Grid Community:
+
+- **Orders:**
+  - Rows are coloured by where the money is (held, flagged, paid, cancelled).
+  - Status chips filter the list, alongside quick search and per-column floating filters.
+  - An **AI parcel check** column shows the verdict and a confidence bar; hover for the model's summary.
+  - A **haggled off** column shows what agents saved the buyer, and **hold expires** counts down the PayPal authorization.
+  - A **pinned totals row** shows held vs released for the current filter.
+  - **Export CSV**.
+  - The **Ship & get paid** button opens the proof-of-shipment check.
+- **Products:** double-click to edit the price, the **private lowest price** used by the haggling agent, haggling on/off and stock. Edits save through `PATCH /api/products/:id`, and the floor is capped at the price.
+
 ## Agent-ready store
 
 - **Manifest:** `GET /.well-known/agent-store.json` (tools, escrow rules, negotiation).
@@ -95,7 +109,7 @@ Requirements: Node.js 20+.
 npm install
 cp .env.example .env      # PayPal sandbox keys + Meta API key
 npm start                 # http://localhost:3000
-npm test                  # 12 end-to-end tests against imitations of the PayPal and Meta APIs
+npm test                  # 13 end-to-end tests against imitations of the PayPal and Meta APIs
 ```
 
 Without keys the app still runs: PayPal and the AI switch to clearly labelled mock modes.
@@ -106,7 +120,7 @@ Connect the repo on render.com (it reads `render.yaml`). Add `PAYPAL_CLIENT_ID`,
 
 ## Tests
 
-`npm test` runs 12 end-to-end tests with fake PayPal and Meta servers and checks the exact requests sent:
+`npm test` runs 13 end-to-end tests with fake PayPal and Meta servers and checks the exact requests sent:
 - `AUTHORIZE` intent, and nothing is captured on approval.
 - The haggling clamps: the seller never goes below the floor, the buyer never goes over budget, and the floor never reaches the buyer side.
 - Negotiated price on the PayPal order; deals are single use; the agent spending cap.

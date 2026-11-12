@@ -267,6 +267,22 @@ test('agent manifest lists the tools and the escrow rules', async () => {
   assert.ok(!('floorPriceUsd' in s.body.products[0]), 'floor price never public');
 });
 
+test('seller edits from the grid: floor capped at price, stock 0 marks sold out, floor stays private', async () => {
+  const pouch = await product(/Crossbody/);
+  const r = await json(`/api/products/${pouch.id}`, { method: 'PATCH', body: JSON.stringify({ priceUsd: 20, floorPriceUsd: 25, negotiable: true }) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.product.priceUsd, 20);
+  assert.equal(r.body.product.floorPriceUsd, 20, 'floor capped at list price');
+  const sold = await json(`/api/products/${pouch.id}`, { method: 'PATCH', body: JSON.stringify({ stock: 0 }) });
+  assert.equal(sold.body.product.status, 'sold_out');
+  const back = await json(`/api/products/${pouch.id}`, { method: 'PATCH', body: JSON.stringify({ stock: 3 }) });
+  assert.equal(back.body.product.status, 'active');
+  const pub = await json(`/api/products/${pouch.id}`);
+  assert.ok(!JSON.stringify(pub.body).includes('floorPriceUsd'), 'floor not in the public product API');
+  const bad = await json(`/api/products/${pouch.id}`, { method: 'PATCH', body: JSON.stringify({ priceUsd: -5 }) });
+  assert.equal(bad.status, 400);
+});
+
 test('bad input gets a friendly 400', async () => {
   const r = await json('/api/products', { method: 'POST', body: JSON.stringify({ title: 'x' }) });
   assert.equal(r.status, 400);

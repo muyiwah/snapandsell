@@ -6,7 +6,25 @@
   <title>Seller dashboard · Snap &amp; Sell</title>
   <link rel="stylesheet" href="/styles.css" />
   <script src="/vendor/ag-grid-community.min.js"></script>
-  <style>.gridbox { width: 100%; } .gridbox .ag-center-cols-viewport { min-height: 90px; } .ag-theme-quartz { --ag-font-family: Inter, system-ui, sans-serif; --ag-active-color: #0f4c3a; }</style>
+  <style>
+    .gridbox { width: 100%; } .gridbox .ag-center-cols-viewport { min-height: 90px; }
+    .ag-theme-quartz { --ag-font-family: Inter, system-ui, sans-serif; --ag-active-color: #0f4c3a; --ag-value-change-value-highlight-background-color: rgba(232,163,23,.35); }
+    .gridhead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .gridhead .chips { margin: 0; }
+    .chip.on { background: var(--green); color: #fff; border-color: var(--green); }
+    .chip .n { opacity: .7; margin-left: 4px; }
+    .gridtools { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+    .gridtools input { width: 260px; padding: 7px 12px; font-size: 14px; }
+    .row-flagged { background: #fdeee9 !important; }
+    .row-held { background: #fffaeb !important; }
+    .row-paid { background: #f1f8f4 !important; }
+    .row-voided { color: #8a8270; }
+    .ag-row-pinned { font-weight: 700; background: #f3ecdf !important; }
+    .ai { display: inline-flex; gap: 6px; align-items: center; }
+    .bar { width: 46px; height: 6px; border-radius: 3px; background: #e6dccb; overflow: hidden; display: inline-block; }
+    .bar i { display: block; height: 100%; }
+    @media (max-width: 720px) { .gridtools { margin-left: 0; width: 100%; } .gridtools input { flex: 1; width: auto; } }
+  </style>
 </head>
 <body>
 <main>
@@ -22,14 +40,24 @@
   </div>
 
   <section class="card" style="margin-bottom:20px">
-    <h3>Orders</h3>
+    <div class="gridhead">
+      <h3 style="margin:0">Orders</h3>
+      <div class="chips" id="statusChips" role="tablist" aria-label="Filter orders by status"></div>
+      <div class="gridtools">
+        <input id="orderSearch" type="text" placeholder="Search orders, tracking, PayPal ID…" aria-label="Search orders" />
+        <button class="btn btn-ghost btn-sm" id="exportCsv" type="button">Export CSV</button>
+      </div>
+    </div>
     <div id="orders" class="ag-theme-quartz gridbox"></div>
+    <div class="hint" style="margin-top:8px">Rows are coloured by where the money is. Hover the AI check for the model's summary. The bottom row totals what PayPal is holding and what has been released.</div>
   </section>
 
-  <div class="grid2">
+  <div style="display:flex;flex-direction:column;gap:20px">
     <section class="card">
       <h3>Products</h3>
+      <div class="hint" style="margin:-4px 0 10px">Double-click a price or your private lowest price to edit it. Your haggling agent uses the new floor straight away.</div>
       <div id="products" class="ag-theme-quartz gridbox"></div>
+      <div id="prodMsg" class="hint" style="margin-top:8px" aria-live="polite"></div>
     </section>
     <section class="card">
       <h3>Activity</h3>
@@ -92,42 +120,126 @@ const actions = (p) => {
   return wrap;
 };
 
+// ---------- orders grid (AG Grid Community) ----------
+const latestCheck = (o) => o.verifications?.[0] || null;
+const aiCell = (p) => {
+  if (p.node.rowPinned) return '';
+  const v = latestCheck(p.data);
+  if (!v) return p.data.status === 'HELD' ? '<span class="hint">waiting for parcel photo</span>' : '';
+  const conf = Math.round((v.check?.confidence || 0) * 100);
+  const color = v.decision === 'release' ? 'var(--green-2)' : v.decision === 'reject' ? 'var(--coral)' : 'var(--gold)';
+  const label = { release: '✓ Same item', reject: '✕ Different item', hold: '? Unclear' }[v.decision];
+  return `<span class="ai"><b style="color:${color}">${label}</b><span class="bar"><i style="width:${conf}%;background:${color}"></i></span><span class="hint">${conf}%</span></span>`;
+};
+const holdLeft = (p) => {
+  if (p.node.rowPinned || !['HELD', 'FLAGGED'].includes(p.data.status) || !p.data.holdExpiresAt) return null;
+  return Math.max(0, Math.ceil((Date.parse(p.data.holdExpiresAt) - Date.now()) / 864e5));
+};
+const STATUS_FILTERS = [['all', 'All'], ['HELD', 'Held'], ['FLAGGED', 'Flagged'], ['PAID', 'Paid'], ['VOIDED', 'Cancelled'], ['ai-agent', 'From AI agents']];
+let statusFilter = 'all';
+let allOrders = [];
+
 const ordersGrid = agGrid.createGrid($('#orders'), {
   columnDefs: [
-    { headerName: '', cellRenderer: actions, width: 200, sortable: false, pinned: 'left' },
-    { field: 'status', headerName: 'Status', cellRenderer: statusPill, width: 150, filter: true },
-    { field: 'productTitle', headerName: 'Product', flex: 1, minWidth: 200 },
-    { field: 'amount', headerName: 'Amount', valueFormatter: money, width: 100 },
-    { field: 'listAmount', headerName: 'List', valueFormatter: money, width: 90 },
-    { field: 'channel', headerName: 'Channel', cellRenderer: channelPill, width: 130, filter: true },
-    { field: 'tracking.trackingNumber', headerName: 'Tracking', width: 150 },
-    { field: 'createdAt', headerName: 'Created', valueFormatter: when, sort: 'desc', width: 175 },
-    { field: 'id', headerName: 'PayPal order', width: 190 },
+    { headerName: '', cellRenderer: (p) => (p.node.rowPinned ? '' : actions(p)), width: 200, sortable: false, filter: false, pinned: 'left' },
+    { field: 'status', headerName: 'Status', cellRenderer: (p) => (p.node.rowPinned ? p.value : statusPill(p)), width: 150, filter: 'agTextColumnFilter' },
+    { field: 'productTitle', headerName: 'Product', flex: 1, minWidth: 200, filter: 'agTextColumnFilter', tooltipField: 'productTitle' },
+    { field: 'amount', headerName: 'Amount', valueFormatter: money, width: 110, filter: 'agNumberColumnFilter', enableCellChangeFlash: true },
+    { headerName: 'Haggled off', colId: 'saved', valueGetter: (p) => (p.data.listAmount && p.data.listAmount > p.data.amount ? Math.round((p.data.listAmount - p.data.amount) * 100) / 100 : null), valueFormatter: (p) => (p.value == null ? '' : `−${usd(p.value)}`), width: 120, filter: 'agNumberColumnFilter', cellStyle: { color: '#3b3fb0' } },
+    { headerName: 'AI parcel check', colId: 'ai', valueGetter: (p) => latestCheck(p.data)?.decision || '', cellRenderer: aiCell, width: 230, filter: 'agTextColumnFilter',
+      tooltipValueGetter: (p) => { const v = latestCheck(p.data); return v ? `${v.check?.summary || ''} ${v.check?.trackingNumber ? `· Tracking ${v.check.trackingNumber}` : ''}` : null; } },
+    { headerName: 'Hold expires', colId: 'hold', valueGetter: holdLeft, valueFormatter: (p) => (p.value == null ? '' : `${p.value} days`), width: 125, filter: 'agNumberColumnFilter', cellStyle: (p) => (p.value != null && p.value <= 3 ? { color: '#8a2412', fontWeight: 700 } : null) },
+    { field: 'channel', headerName: 'Channel', cellRenderer: (p) => (p.node.rowPinned ? '' : channelPill(p)), width: 135, filter: 'agTextColumnFilter' },
+    { field: 'tracking.trackingNumber', headerName: 'Tracking', width: 150, filter: 'agTextColumnFilter' },
+    { field: 'createdAt', headerName: 'Created', valueFormatter: when, sort: 'desc', width: 175, filter: 'agDateColumnFilter', filterValueGetter: (p) => (p.data.createdAt ? new Date(p.data.createdAt) : null) },
+    { field: 'id', headerName: 'PayPal order', width: 190, filter: 'agTextColumnFilter' },
   ],
-  defaultColDef: { sortable: true, resizable: true },
+  defaultColDef: { sortable: true, resizable: true, floatingFilter: true, suppressHeaderMenuButton: true },
   rowData: [],
   getRowId: (p) => p.data.id,
   domLayout: 'autoHeight',
+  animateRows: true,
+  tooltipShowDelay: 250,
+  rowClassRules: {
+    'row-flagged': (p) => p.data?.status === 'FLAGGED',
+    'row-held': (p) => p.data?.status === 'HELD',
+    'row-paid': (p) => p.data?.status === 'PAID',
+    'row-voided': (p) => p.data?.status === 'VOIDED',
+  },
+  isExternalFilterPresent: () => statusFilter !== 'all',
+  doesExternalFilterPass: (n) => (statusFilter === 'ai-agent' ? n.data.channel === 'ai-agent' : n.data.status === statusFilter),
+  onFilterChanged: () => updateTotals(),
   overlayNoRowsTemplate: 'No orders yet. Buy something from the store or with the AI agent.',
 });
 
+/** Pinned bottom row: what PayPal holds and what was released, for the rows currently shown. */
+function updateTotals() {
+  const shown = [];
+  ordersGrid.forEachNodeAfterFilter((n) => n.data && shown.push(n.data));
+  const sum = (s) => Math.round(shown.filter((o) => s.includes(o.status)).reduce((a, o) => a + Number(o.amount || 0), 0) * 100) / 100;
+  const saved = Math.round(shown.reduce((a, o) => a + Math.max(0, (o.listAmount || o.amount) - o.amount), 0) * 100) / 100;
+  ordersGrid.setGridOption('pinnedBottomRowData', [{
+    id: `${shown.length} orders`, status: `Held ${usd(sum(['HELD', 'FLAGGED']))}`, productTitle: `Released to you ${usd(sum(['PAID']))}`,
+    amount: Math.round(shown.reduce((a, o) => a + Number(o.amount || 0), 0) * 100) / 100, listAmount: saved ? shown.reduce((a, o) => a + (o.listAmount || o.amount), 0) : null,
+  }]);
+}
+
+function renderChips() {
+  const count = (k) => (k === 'all' ? allOrders.length : k === 'ai-agent' ? allOrders.filter((o) => o.channel === 'ai-agent').length : allOrders.filter((o) => o.status === k).length);
+  $('#statusChips').innerHTML = STATUS_FILTERS.map(([k, l]) => `<button type="button" class="chip ${statusFilter === k ? 'on' : ''}" data-k="${k}" role="tab" aria-selected="${statusFilter === k}">${l}<span class="n">${count(k)}</span></button>`).join('');
+}
+$('#statusChips').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-k]');
+  if (!b) return;
+  statusFilter = b.dataset.k;
+  renderChips();
+  ordersGrid.onFilterChanged();
+});
+$('#orderSearch').addEventListener('input', (e) => { ordersGrid.setGridOption('quickFilterText', e.target.value); });
+$('#exportCsv').addEventListener('click', () => ordersGrid.exportDataAsCsv({
+  fileName: `snap-and-sell-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+  columnKeys: ['status', 'productTitle', 'amount', 'saved', 'ai', 'hold', 'channel', 'tracking.trackingNumber', 'createdAt', 'id'],
+  skipPinnedBottom: true,
+}));
+
+// ---------- products grid: inline editing saved to the server ----------
+const floorOf = (p) => (p.negotiable === false ? null : p.floorPriceUsd ?? Math.round(p.priceUsd * 85) / 100);
 const productsGrid = agGrid.createGrid($('#products'), {
   columnDefs: [
-    { field: 'title', headerName: 'Title', flex: 1, minWidth: 180 },
-    { field: 'priceUsd', headerName: 'Price', valueFormatter: money, width: 90 },
-    { headerName: 'Lowest (private)', valueGetter: (p) => (p.data.negotiable === false ? null : p.data.floorPriceUsd ?? Math.round(p.data.priceUsd * 85) / 100), valueFormatter: (p) => (p.value == null ? 'fixed' : usd(p.value)), width: 130 },
-    { field: 'stock', headerName: 'Stock', width: 80 },
-    { field: 'aiModel', headerName: 'Listed by', width: 140 },
+    { field: 'title', headerName: 'Title', flex: 1, minWidth: 220, tooltipField: 'title' },
+    { field: 'sellerName', headerName: 'Shop', width: 200 },
+    { field: 'priceUsd', headerName: 'Price ✎', valueFormatter: money, width: 100, editable: true, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 1, max: 10000, precision: 2 }, enableCellChangeFlash: true },
+    { headerName: 'Lowest (private) ✎', colId: 'floor', valueGetter: (p) => floorOf(p.data), valueFormatter: (p) => (p.value == null ? 'fixed price' : usd(p.value)), width: 175,
+      editable: (p) => p.data.negotiable !== false, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 1, precision: 2 },
+      valueSetter: (p) => { p.data.floorPriceUsd = Number(p.newValue); return true; }, enableCellChangeFlash: true },
+    { headerName: 'Haggling', colId: 'negotiable', width: 105, editable: true, cellDataType: 'boolean', cellEditor: 'agCheckboxCellEditor', cellRenderer: 'agCheckboxCellRenderer',
+      valueGetter: (p) => p.data.negotiable !== false, valueSetter: (p) => { p.data.negotiable = Boolean(p.newValue); return true; } },
+    { field: 'stock', headerName: 'Stock', width: 80, editable: true, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 0, max: 999, precision: 0 } },
   ],
   defaultColDef: { sortable: true, resizable: true },
   rowData: [],
   getRowId: (p) => p.data.id,
   domLayout: 'autoHeight',
+  singleClickEdit: false,
+  stopEditingWhenCellsLoseFocus: true,
+  onCellValueChanged: async (e) => {
+    const p = e.data;
+    const msg = $('#prodMsg');
+    try {
+      const { product } = await api(`/api/products/${encodeURIComponent(p.id)}`, { method: 'PATCH', body: JSON.stringify({ priceUsd: p.priceUsd, floorPriceUsd: p.floorPriceUsd, negotiable: p.negotiable !== false, stock: p.stock }) });
+      e.node.setData(product);
+      msg.textContent = `Saved ${product.title}: ${usd(product.priceUsd)}${product.negotiable === false ? ', fixed price' : `, lowest ${usd(floorOf(product))}`}.`;
+    } catch (err) {
+      msg.textContent = `Not saved: ${err.message}`;
+      refresh();
+    }
+  },
 });
 
 const agentTag = (e) => (e.channel === 'ai-agent' ? ' <span class="pill agent">AI agent</span>' : '');
 const label = {
   product_listed: (e) => `Listed <b>${esc(e.title)}</b>`,
+  product_updated: (e) => `✎ Updated <b>${esc(e.title)}</b>`,
   deal_agreed: (e) => `🤝 Agents agreed <b>${usd(e.amount)}</b> for ${esc(e.productTitle)} <span class="hint">(list ${usd(e.listPriceUsd)})</span>`,
   order_created: (e) => `Checkout started · ${usd(e.amount)}${agentTag(e)}`,
   order_held: (e) => `🛡️ <b>${usd(e.amount)} held by PayPal</b> · ${esc(e.productTitle || '')}${agentTag(e)}`,
@@ -147,8 +259,12 @@ async function refresh() {
   $('#k-agent').textContent = d.stats.agentOrders;
   $('#k-deals').textContent = d.stats.deals;
   $('#k-swaps').textContent = d.stats.blockedSwaps;
+  allOrders = d.orders;
   ordersGrid.setGridOption('rowData', d.orders);
-  productsGrid.setGridOption('rowData', d.products);
+  updateTotals();
+  renderChips();
+  // Don't replace product rows while the seller is editing one.
+  if (!productsGrid.getEditingCells().length) productsGrid.setGridOption('rowData', d.products);
   $('#feed').innerHTML = d.events.map((e) => [(label[e.type] || ((x) => esc(x.type)))(e), e]).filter(([h]) => h)
     .map(([h, e]) => `<li><span>${h}</span><span class="hint">${new Date(e.at).toLocaleTimeString()}</span></li>`).join('') || '<li class="hint">Nothing yet.</li>';
   return d;

@@ -21,7 +21,15 @@ For about 20 years, people in Nigeria could not receive PayPal payments. In Janu
 - **PayPal:** Orders v2 with `intent: AUTHORIZE`; authorize on approval; capture the authorization after proof of shipment; void to cancel; add tracking to the order; webhooks verified with the verify-webhook-signature API; JS SDK buttons with Venmo and Pay Later; the redirect approval flow for agents and QR codes; OAuth with token caching; idempotency keys. All in the PayPal sandbox.
 - **AI:** Meta's Muse Spark through the Responses API, used four ways: vision for photo-to-listing; two-image comparison plus waybill reading for proof of shipment; structured turns for the two haggling agents; and tool calling for the buyer's shopping agent, streamed live to the browser.
 - **Safety by design:** the model reports what it sees; plain code decides whether money moves (confidence thresholds, readable tracking, recipient match). The haggling floor never reaches the buyer side, and every offer is clamped on the server.
-- **Stack:** Node.js, Express, sharp, zod, AG Grid Community (seller dashboard), MCP SDK. Deployed on Render. 12 end-to-end tests against imitations of the PayPal and Meta APIs.
+- **Seller dashboard (AG Grid Community):** the escrow control room.
+  - Rows are coloured by where the money is: held, flagged, paid, cancelled.
+  - Status chips filter the orders (external filter), next to quick search and floating filters.
+  - An "AI parcel check" column shows the verdict and confidence, with the model's summary on hover.
+  - Columns for "haggled off" savings and a hold-expiry countdown.
+  - A pinned totals row shows money held vs released for whatever is filtered.
+  - CSV export.
+  - Price, private floor, haggling on/off and stock are edited inline in the products grid and saved to the server, so the seller's haggling agent uses the new floor straight away.
+- **Stack:** Node.js, Express, sharp, zod, AG Grid Community, MCP SDK. Deployed on a VPS (Nginx, PM2, HTTPS). 13 end-to-end tests against imitations of the PayPal and Meta APIs.
 
 ## Challenges we ran into
 - **Letting AI near money safely.** We split "see" from "decide": Muse Spark only describes the photos, and a small set of fixed rules decides whether to capture, hold or flag.
@@ -44,6 +52,8 @@ paypal, paypal-orders-api, paypal-payments-api, paypal-js-sdk, venmo, meta-muse-
 - **Meta Muse Spark** (`muse-spark-1.3`, Responses API): listing from a photo; two-image proof-of-shipment check with waybill reading; buyer and seller haggling agents; tool-calling shopping agent.
 - **PayPal** sandbox: Orders v2 (authorize, track), Payments v2 authorizations (capture, void), webhooks, JS SDK.
 - **Model Context Protocol SDK:** MCP server exposing the store's tools to any agent.
-- **AG Grid Community:** seller dashboard tables.
+- **AG Grid Community:** the seller dashboard.
+  - Orders grid: status row styling, external-filter status chips, quick filter, floating filters, AI-verdict cell renderer with tooltips, pinned totals row, cell-change flash and CSV export.
+  - Products grid: inline editing (number and checkbox editors) saved through `PATCH /api/products/:id`.
 - **Render:** hosting.
 - **Claude (Anthropic):** coding assistant during the build.

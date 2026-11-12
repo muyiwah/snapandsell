@@ -110,6 +110,31 @@ app.post('/api/products', wrap(async (req, res) => {
   res.status(201).json({ product, url: `${config.baseUrl}/p/${product.id}` });
 }));
 
+// Seller edits from the dashboard grid: price, private floor, haggling on/off, stock.
+app.patch('/api/products/:id', limit(60, 60_000), wrap(async (req, res) => {
+  const p = store.getProduct(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Product not found.' });
+  const body = z.object({
+    priceUsd: z.coerce.number().positive().max(10000).optional(),
+    floorPriceUsd: z.coerce.number().positive().max(10000).optional(),
+    negotiable: z.boolean().optional(),
+    stock: z.coerce.number().int().min(0).max(999).optional(),
+  }).parse(req.body);
+  const price = Math.round((body.priceUsd ?? p.priceUsd) * 100) / 100;
+  const patch = { priceUsd: price };
+  // The floor can never be above the list price.
+  if (body.floorPriceUsd != null || p.floorPriceUsd != null) patch.floorPriceUsd = Math.min(price, Math.round((body.floorPriceUsd ?? p.floorPriceUsd) * 100) / 100);
+  if (body.negotiable != null) patch.negotiable = body.negotiable;
+  if (body.stock != null) {
+    patch.stock = body.stock;
+    if (body.stock === 0) patch.status = 'sold_out';
+    else if (p.status === 'sold_out') patch.status = 'active';
+  }
+  const product = store.updateProduct(p.id, patch);
+  store.logEvent('product_updated', { productId: p.id, title: p.title });
+  res.json({ product });
+}));
+
 app.get('/api/products', (_req, res) => res.json({ products: store.listProducts().map(agentTools.publicProduct) }));
 
 app.get('/api/products/:id', (req, res) => {
