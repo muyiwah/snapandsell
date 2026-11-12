@@ -387,3 +387,15 @@ dialog.sheet .x { float: right; background: none; border: 0; font-size: 22px; cu
 .msg a.msg-link { color: var(--green-2); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
 .msg a.msg-link.pp { display: inline-block; margin: 2px 0; padding: 4px 12px; border-radius: 999px; background: #ffc439; color: #111; text-decoration: none; }
 .msg a.msg-link.pp:hover { filter: brightness(1.05); }
+
+/* Context-aware suggestion chips */
+.chips.chips-new .chip { animation: chipIn .35s ease both; }
+.chips.chips-new .chip:nth-child(2) { animation-delay: .06s; }
+.chips.chips-new .chip:nth-child(3) { animation-delay: .12s; }
+.chips.chips-new .chip:nth-child(4) { animation-delay: .18s; }
+@keyframes chipIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.chip { color: var(--ink); }
+.chip:hover:not([disabled]) { border-color: var(--green-2); background: #f3faf6; }
+.chip[disabled] { opacity: .5; cursor: progress; }
+a.chip-link { text-decoration: none; display: inline-flex; align-items: center; color: var(--green); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .chips.chips-new .chip { animation: none; } }

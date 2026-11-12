@@ -138,8 +138,79 @@ export function mountAgent(root) {
     return '';
   }
 
+  // ---------- context-aware suggestion chips ----------
+  // What happened in the current turn, so the next suggestions fit the conversation.
+  let turn = {};
+  let lastProducts = [];
+  const short = (t) => { const w = String(t || 'it').split(/\s+/); return w.length > 3 ? w.slice(0, 3).join(' ') + '…' : w.join(' '); };
+  const money = (n) => Math.round(Number(n) * 100) / 100;
+  const titleOf = (id) => lastProducts.find((p) => p.id === id)?.title;
+
+  function track(step) {
+    const r = step.result || {};
+    if (r.error) { turn.error = r.error; return; }
+    if (step.tool === 'search_products' && r.products) { lastProducts = r.products; turn.search = r.products; }
+    if (step.tool === 'negotiate_price') {
+      const sellerOffers = (r.transcript || []).filter((m) => m.side === 'seller').map((m) => m.offerUsd);
+      turn.neg = {
+        id: step.args?.product_id, title: titleOf(step.args?.product_id) || haggleTitle, budget: Number(step.args?.max_price_usd),
+        agreed: r.agreed, price: r.priceUsd, list: r.listPriceUsd, sellerLast: sellerOffers.length ? sellerOffers[sellerOffers.length - 1] : null,
+      };
+    }
+    if (step.tool === 'start_checkout' && r.orderId) turn.checkout = r;
+  }
+
+  function suggestions() {
+    const { neg, search, checkout, error } = turn;
+    if (checkout) {
+      return [
+        { label: 'Is my order paid yet?', msg: `What's the status of order ${checkout.orderId}?` },
+        { label: 'Find something else', msg: 'Find me something else I might like' },
+        { label: 'Go to My orders →', href: '/orders' },
+      ];
+    }
+    if (neg && neg.agreed) {
+      return [
+        { label: `Buy it at ${usd(neg.price)}`, msg: `Buy the ${neg.title || 'item'} using the deal` },
+        { label: 'Show me similar items', msg: `Show me items similar to the ${neg.title || 'last one'}` },
+        { label: 'Haggle something else', msg: 'What else could you get me a deal on?' },
+      ];
+    }
+    if (neg && neg.agreed === false && neg.title) {
+      const list = Number(neg.list) || null;
+      const plusOne = money(Math.min(neg.budget + 1, list || Infinity));
+      const out = [];
+      if (list && plusOne < list) out.push({ label: `Put a dollar on top (${usd(plusOne)})`, msg: `Put a dollar on top: try again for the ${neg.title}, my max is $${plusOne}` });
+      if (neg.sellerLast && neg.sellerLast > neg.budget && (!list || neg.sellerLast < list)) out.push({ label: `Meet the seller at ${usd(neg.sellerLast)}`, msg: `OK, meet the seller: try again for the ${neg.title}, my max is $${money(neg.sellerLast)}` });
+      if (list) out.push({ label: `Pay the full ${usd(list)}`, msg: `Buy the ${neg.title} at the full price` });
+      out.push({ label: `Find something under ${usd(neg.budget)}`, msg: `Find me something else under $${neg.budget}` });
+      return out;
+    }
+    if (search && search.length) {
+      const p = search[0];
+      return [
+        { label: `Haggle for the ${short(p.title)}`, msg: `Get me a deal on the ${p.title}, my max is $${Math.floor(p.priceUsd * 0.9)}` },
+        { label: `Buy the ${short(p.title)}`, msg: `Buy the ${p.title}` },
+        { label: 'Show me something cheaper', msg: `Show me something cheaper than $${p.priceUsd}` },
+      ];
+    }
+    if (error) return [{ label: 'Try again', msg: lastUserText }, { label: "Show me what's in the shop", msg: "Show me what's in the shop" }];
+    return null; // nothing notable: keep the current chips
+  }
+
+  function renderChips(list) {
+    if (!list) return;
+    const box = $('[data-chips]');
+    box.innerHTML = list.map((c) => (c.href
+      ? `<a class="chip chip-link" href="${esc(c.href)}">${esc(c.label)}</a>`
+      : `<button type="button" class="chip" data-msg="${esc(c.msg)}">${esc(c.label)}</button>`)).join('');
+    box.classList.remove('chips-new'); void box.offsetWidth; box.classList.add('chips-new');
+    box.scrollLeft = 0;
+  }
+
   function onStep(step) {
     emit('agent:step', step);
+    if ('result' in step) track(step);
     const trail = $('[data-trail]');
     if (firstTrail) { trail.innerHTML = ''; firstTrail = false; }
     const key = step.tool + JSON.stringify(step.args);
@@ -163,10 +234,11 @@ export function mountAgent(root) {
     }
   }
 
-  let haggleList = null;
+  let haggleList = null, haggleTitle = null, lastUserText = '';
   function onHaggle(e) {
     if (e.type === 'haggle_start') {
       haggleList = e.listPriceUsd;
+      haggleTitle = e.productTitle;
       haggleBox = document.createElement('div');
       haggleBox.className = 'haggle';
       haggleBox.innerHTML = `<div class="hhead"><b>🤝 Haggling: ${esc(e.productTitle)}</b><span>list ${usd(e.listPriceUsd)}</span></div>`;
@@ -210,6 +282,8 @@ export function mountAgent(root) {
 
   async function send(text) {
     if (!text.trim()) return;
+    turn = {};
+    lastUserText = text;
     addMsg('user', text);
     history.push({ role: 'user', content: text });
     $('[data-input]').value = '';
@@ -228,14 +302,16 @@ export function mountAgent(root) {
           addMsg('bot', reply);
           history.push({ role: 'assistant', content: ids.length && !ids.every((x) => reply.includes(x)) ? `${reply}\n[ref: ${ids.join(', ')}]` : reply });
         },
-        error: (e) => { finished = true; thinking.textContent = `Sorry, something went wrong: ${e.error}`; },
+        error: (e) => { finished = true; turn.error = e.error; thinking.textContent = `Sorry, something went wrong: ${e.error}`; },
       });
-      if (!finished) thinking.textContent = 'The connection dropped. Please try again.';
+      if (!finished) { turn.error = 'dropped'; thinking.textContent = 'The connection dropped. Please try again.'; }
     } catch (e) {
+      turn.error = e.message;
       thinking.textContent = `Sorry, something went wrong: ${e.message}`;
     } finally {
       busy = false;
       $('[data-send]').disabled = false;
+      renderChips(suggestions());
       root.querySelectorAll('[data-chips] .chip').forEach((c) => (c.disabled = false));
       emit('agent:busy', false);
     }
@@ -252,6 +328,9 @@ export function mountAgent(root) {
   }
 
   $('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); guardedSend($('[data-input]').value); });
-  $('[data-chips]').addEventListener('click', (e) => { if (e.target.classList.contains('chip')) guardedSend(e.target.textContent); });
+  $('[data-chips]').addEventListener('click', (e) => {
+    const chip = e.target.closest('button.chip');
+    if (chip) guardedSend(chip.dataset.msg || chip.textContent);
+  });
   return { send: guardedSend, focus: () => $('[data-input]').focus(), get busy() { return busy; } };
 }
