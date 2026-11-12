@@ -17,7 +17,7 @@ Snap & Sell solves both:
 
 The human stays in control: no tool can move money, agents only start checkouts the buyer approves, and agent orders are capped.
 
-**Live demo:** https://snapsell.finessedev.space · **Video:** https://youtu.be/qeOOitYo-Es
+**Live demo:** https://snapsell.finessedev.space · **Video:** https://youtu.be/00q4ByPMMvs
 
 ---
 
