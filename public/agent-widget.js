@@ -2,6 +2,52 @@
 // Streams tool steps and the haggle live from POST /api/agent/chat (SSE).
 import { api, usd, esc, myOrders } from '/common.js?v=4';
 
+/**
+ * Animated handshake shown when the two agents strike a deal: the buyer's arm (indigo) and the
+ * seller's arm (green, gold cuff) slide in, clasp and shake; confetti bursts; "Deal!" pops in.
+ */
+const CONFETTI = ['#e8a317', '#16684f', '#6b70f0', '#d9583b', '#f5c451', '#4fd69c'];
+function dealShake(price, list) {
+  const el = document.createElement('div');
+  el.className = 'dealshake';
+  el.setAttribute('role', 'status');
+  const bits = Array.from({ length: 18 }, (_, i) => {
+    const a = (i / 18) * Math.PI * 2 + (i % 3) * 0.2;
+    const d = 70 + (i % 4) * 22;
+    return `<i style="--x:${Math.round(Math.cos(a) * d)}px;--y:${Math.round(Math.sin(a) * d * 0.7 - 10)}px;--r:${(i * 47) % 360}deg;--c:${CONFETTI[i % CONFETTI.length]};--d:${(i % 5) * 0.03}s"></i>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="ds-stage" aria-hidden="true">
+      <span class="ds-ring"></span>
+      <svg class="ds-svg" viewBox="40 22 140 66" width="140" height="66" preserveAspectRatio="xMidYMid meet">
+        <g class="ds-clasp">
+          <g class="ds-right">
+            <rect x="140" y="44" width="84" height="30" rx="8" fill="#16684f"/>
+            <rect x="134" y="41" width="12" height="36" rx="4" fill="#e8a317"/>
+            <rect x="96" y="45" width="44" height="28" rx="14" fill="#8d5524"/>
+            <ellipse cx="104" cy="74" rx="10" ry="6" fill="#7a4720"/>
+          </g>
+          <g class="ds-left">
+            <rect x="-4" y="40" width="84" height="30" rx="8" fill="#3b3fb0"/>
+            <rect x="74" y="37" width="12" height="36" rx="4" fill="#e5e7ff"/>
+            <rect x="84" y="39" width="46" height="30" rx="15" fill="#c68642"/>
+            <path d="M100 48 h22 M100 55 h24 M100 62 h21" stroke="rgba(80,40,10,.28)" stroke-width="2.4" stroke-linecap="round"/>
+          </g>
+          <!-- Thumbs cross on top: each rests on the other person's hand. -->
+          <g class="ds-right"><path d="M118 44 q-10 -10 -24 -6 q-6 2 -2 6 q10 2 20 6 z" fill="#7a4720"/></g>
+          <g class="ds-left"><path d="M98 40 q12 -11 26 -5 q5 3 0 6 q-12 1 -22 5 z" fill="#d9995e"/></g>
+        </g>
+      </svg>
+      <div class="ds-confetti">${bits}</div>
+    </div>
+    <div class="ds-text">
+      <div class="ds-title">Deal!</div>
+      <div class="ds-price">${usd(price)}${list && list > price ? ` <s>${usd(list)}</s>` : ''}</div>
+      <div class="ds-sub">Both agents shook on it${list && list > price ? `: you save ${usd(Math.round((list - price) * 100) / 100)}` : ''}</div>
+    </div>`;
+  return el;
+}
+
 export function mountAgent(root) {
   root.innerHTML = `
     <div class="agent-head">
@@ -84,8 +130,10 @@ export function mountAgent(root) {
     }
   }
 
+  let haggleList = null;
   function onHaggle(e) {
     if (e.type === 'haggle_start') {
+      haggleList = e.listPriceUsd;
       haggleBox = document.createElement('div');
       haggleBox.className = 'haggle';
       haggleBox.innerHTML = `<div class="hhead"><b>🤝 Haggling: ${esc(e.productTitle)}</b><span>list ${usd(e.listPriceUsd)}</span></div>`;
@@ -96,10 +144,7 @@ export function mountAgent(root) {
       b.innerHTML = `<div class="who">${e.side === 'buyer' ? 'Your agent' : "Seller's agent"}</div><div>${esc(e.message)}</div><div class="amt">${e.accept ? `✓ ${usd(e.offerUsd)}` : usd(e.offerUsd)}</div>`;
       haggleBox.appendChild(b);
     } else if (e.type === 'haggle_end' && haggleBox) {
-      const d = document.createElement('div');
-      d.className = 'deal';
-      d.textContent = e.agreed ? `Deal agreed at ${usd(e.priceUsd)}` : 'No deal within your budget';
-      haggleBox.appendChild(d);
+      haggleBox.appendChild(e.agreed ? dealShake(e.priceUsd, haggleList) : Object.assign(document.createElement('div'), { className: 'deal', textContent: 'No deal within your budget' }));
       haggleBox = null;
     }
     emit('agent:haggle', e);
