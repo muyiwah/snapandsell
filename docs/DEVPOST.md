@@ -46,7 +46,7 @@ Trust in agentic commerce comes from boundaries more than clever prompts: money 
 Courier tracking events before capture, Pidgin and Yoruba voice listing, PayPal Payouts for marketplace splits, seller accounts, and publishing catalogs to PayPal's agentic commerce channels.
 
 ## Built with
-paypal, paypal-orders-api, paypal-payments-api, paypal-js-sdk, venmo, meta-muse-spark, mcp, node.js, express, ag-grid, render
+paypal, paypal-orders-api, paypal-payments-api, paypal-js-sdk, venmo, meta-muse-spark, mcp, node.js, express, ag-grid, nginx, pm2
 
 ## Tools used (for the form)
 - **Meta Muse Spark** (`muse-spark-1.3`, Responses API): listing from a photo; two-image proof-of-shipment check with waybill reading; buyer and seller haggling agents; tool-calling shopping agent.
@@ -55,5 +55,5 @@ paypal, paypal-orders-api, paypal-payments-api, paypal-js-sdk, venmo, meta-muse-
 - **AG Grid Community:** the seller dashboard.
   - Orders grid: status row styling, external-filter status chips, quick filter, floating filters, AI-verdict cell renderer with tooltips, pinned totals row, cell-change flash and CSV export.
   - Products grid: inline editing (number and checkbox editors) saved through `PATCH /api/products/:id`.
-- **Render:** hosting.
+- **Hosting:** a VPS with Nginx, PM2 and HTTPS. A `render.yaml` is included for one-click deploys to Render.
 - **Claude (Anthropic):** coding assistant during the build.
