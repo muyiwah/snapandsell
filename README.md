@@ -25,7 +25,7 @@ The human stays in control: no tool can move money, agents only start checkouts 
 
 **Sandbox buyer** (PayPal sandbox, fake money): `sb-nu047p53749324@personal.example.com` / `0$Bn0cM;`
 
-1. **Haggle and buy with an agent:** open `/agent`, tap *"Get me a deal on the Ankara buckle tote, my max is $34"* and watch the two agents negotiate. Then tap *"Buy it"*, click **Review & approve on PayPal** and log in with the sandbox buyer. You land on the order page: **PayPal is holding your money**.
+1. **Haggle and buy with an agent:** open **Shop** (`/store`). The AI shopping agent sits beside the products. Tap *"Get me a deal on the Ankara buckle tote, my max is $34"*, or **🤝 Haggle with AI** on any product, and watch the two agents negotiate. Then tap *"Buy it"*, click **Review & approve on PayPal** and log in with the sandbox buyer. You land on the order page: **PayPal is holding your money**. The order is also listed under **My orders** (`/orders`). No buyer account is needed; PayPal is the login.
 2. **Ship and get paid:** open `/dashboard`, click **Ship & get paid** on that order, open *"No parcel to hand? Try a sample photo"* and choose **✗ A different item (swap)**. The check catches the swap and the money stays held. Then choose **✓ Correct item**: the money is released and the tracking number is added to the PayPal order.
 3. **Sell:** open `/`, upload any product photo, press **Write my listing with AI**, set your private lowest price, then **Publish**.
 4. **Pay with buttons:** open any product page and pay with the PayPal, Venmo or Pay Later buttons.

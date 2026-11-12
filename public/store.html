@@ -3,27 +3,62 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Snap &amp; Sell Store</title>
+  <title>Shop · Snap &amp; Sell</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
 <main>
   <div class="eyebrow">Made in Nigeria · Paid with PayPal</div>
-  <h1>The store</h1>
-  <p class="lead">Every item was listed from a single photo. Pay with PayPal or send your AI agent to haggle. Either way, PayPal holds your money until the seller's parcel photo is verified against the listing.</p>
-  <div class="btns" style="margin:-8px 0 20px"><a class="btn btn-ghost" href="/.well-known/agent-store.json" target="_blank">View agent manifest</a><a class="btn btn-primary" href="/agent">Shop with an AI agent</a></div>
-  <div class="products" id="grid"><div class="hint">Loading…</div></div>
+  <h1>Shop</h1>
+  <p class="lead">Buy directly, or let the AI agent find items and haggle for you. Either way, PayPal holds your money until the seller's parcel photo matches the listing.</p>
+
+  <div class="shop">
+    <section aria-label="Products">
+      <div class="products" id="grid"><div class="hint">Loading…</div></div>
+      <p class="hint" style="margin-top:18px">For developers: any AI agent can shop here too, via the <a href="/.well-known/agent-store.json" target="_blank">agent manifest</a>, HTTP API or MCP server.</p>
+    </section>
+    <aside class="card agentpanel" id="agent" aria-label="AI shopping agent"></aside>
+  </div>
 </main>
+<footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
 <script type="module">
 import { $, api, header, usd, esc } from '/common.js';
+import { mountAgent } from '/agent-widget.js';
 header('store');
+const agent = mountAgent($('#agent'));
+
 const { products } = await api('/api/products');
 $('#grid').innerHTML = products.length ? products.map((p) => `
-  <a class="pcard" href="/p/${p.id}">
-    <img src="${esc(p.imageUrl ? new URL(p.imageUrl).pathname : '')}" alt="${esc(p.title)}" loading="lazy" />
-    <div class="body"><span class="pill">${esc(p.category)}</span><h3>${esc(p.title)}</h3>
-      <div class="seller">${esc(p.seller)} · ${esc(p.sellerCity)}</div><div class="price">${usd(p.priceUsd)}</div></div>
-  </a>`).join('') : '<div class="hint">No products yet. <a href="/">List the first one</a>.</div>';
+  <div class="pcard">
+    <a href="/p/${p.id}" class="pcard-link" aria-label="${esc(p.title)}, ${usd(p.priceUsd)}">
+      <img src="${esc(p.imageUrl ? new URL(p.imageUrl).pathname : '')}" alt="" loading="lazy" />
+    </a>
+    <div class="body">
+      <span class="pill">${esc(p.category)}</span>
+      <h3><a href="/p/${p.id}" class="plain">${esc(p.title)}</a></h3>
+      <div class="seller">${esc(p.seller)} · ${esc(p.sellerCity)}</div>
+      <div class="price">${usd(p.priceUsd)}</div>
+      <div class="pactions">
+        <a class="btn btn-pp btn-sm" href="/p/${p.id}">Buy</a>
+        ${p.negotiable ? `<button type="button" class="btn btn-ghost btn-sm" data-haggle="${esc(p.title)}" data-price="${p.priceUsd}">🤝 Haggle with AI</button>` : ''}
+      </div>
+    </div>
+  </div>`).join('') : '<div class="hint">No products yet. <a href="/">List the first one</a>.</div>';
+
+$('#grid').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-haggle]');
+  if (!b) return;
+  const budget = Math.floor(Number(b.dataset.price) * 0.92);
+  $('#agent').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  agent.send(`Get me a deal on the ${b.dataset.haggle}, my max is $${budget}`);
+});
+// Arriving from a product page's "let the AI agent haggle" link.
+const want = products.find((p) => p.id === new URLSearchParams(location.search).get('haggle'));
+if (want) {
+  $('#agent').scrollIntoView();
+  agent.send(`Get me a deal on the ${want.title}, my max is $${Math.floor(want.priceUsd * 0.92)}`);
+  history.replaceState(null, '', '/store#agent');
+} else if (location.hash === '#agent') { $('#agent').scrollIntoView(); agent.focus(); }
 </script>
 </body>
 </html>

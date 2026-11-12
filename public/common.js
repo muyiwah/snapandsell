@@ -19,8 +19,8 @@ export const getConfig = () => (cfgPromise ??= api('/api/config'));
 export async function header(active) {
   const links = [
     ['/', 'Sell', 'sell'],
-    ['/store', 'Store', 'store'],
-    ['/agent', 'AI shopping agent', 'agent'],
+    ['/store', 'Shop', 'store'],
+    ['/orders', 'My orders', 'orders'],
     ['/dashboard', 'Seller dashboard', 'dashboard'],
   ];
   const top = document.createElement('header');
@@ -86,3 +86,22 @@ export function verdictHtml(v) {
       <div class="hint" style="margin-top:8px">Checked by ${esc(c.model || 'Muse Spark')}${v.ms ? ` in ${(v.ms / 1000).toFixed(1)}s` : ''}. The AI reports what it sees; fixed rules decide whether money moves.</div>
     </div>`;
 }
+
+/**
+ * Orders placed in this browser (no buyer accounts: PayPal is the login).
+ * Per-device convenience only; storage can be unavailable, so every access is guarded.
+ */
+const MY_KEY = 'snapsell.myOrders';
+export const myOrders = {
+  list() {
+    try { return JSON.parse(localStorage.getItem(MY_KEY) || '[]'); } catch { return []; }
+  },
+  add(o) {
+    try {
+      const all = myOrders.list().filter((x) => x.id !== o.id);
+      const prev = myOrders.list().find((x) => x.id === o.id) || {};
+      all.unshift({ ...prev, ...o, at: prev.at || new Date().toISOString() });
+      localStorage.setItem(MY_KEY, JSON.stringify(all.slice(0, 50)));
+    } catch { /* storage unavailable: the order page link still works */ }
+  },
+};

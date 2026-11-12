@@ -20,6 +20,7 @@
       <div id="cancelled" class="err hidden">Payment cancelled. You can try again below.</div>
       <div class="trust"><span class="ic">🛡️</span><div><b>Your money is held, not sent.</b> PayPal holds your payment and releases it to the seller only after AI checks that their parcel photo matches this listing. Wrong item? Cancel and you're not charged.</div></div>
       <div style="margin-top:18px" id="pay"></div>
+      <a id="haggleLink" class="btn btn-ghost hidden" style="width:100%;margin-top:10px">🤝 Want a better price? Let the AI agent haggle</a>
       <div id="payErr" class="err hidden"></div>
       <details style="margin-top:18px">
         <summary style="cursor:pointer;font-weight:600">Share or pay by QR</summary>
@@ -53,6 +54,10 @@ try {
   $('#qr').src = `/api/products/${p.id}/qr.png`;
   $('#wa').href = `https://wa.me/?text=${encodeURIComponent(`${p.title} ${usd(p.priceUsd)}. Pay with PayPal: ${location.origin}/p/${p.id}`)}`;
 
+  if (p.inStock && p.negotiable) {
+    $('#haggleLink').href = `/store?haggle=${encodeURIComponent(p.id)}#agent`;
+    $('#haggleLink').classList.remove('hidden');
+  }
   if (!p.inStock) {
     $('#pay').innerHTML = '<div class="pill warn">Sold out</div>';
   } else {

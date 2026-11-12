@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My orders · Snap &amp; Sell</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<main style="max-width:860px">
+  <div class="eyebrow">Buyer</div>
+  <h1>My orders</h1>
+  <p class="lead">Orders you've placed on this device. No account needed: PayPal is your login. Each order page shows where your money is and the seller's proof of shipment.</p>
+  <div class="olist" id="list"><div class="hint">Loading…</div></div>
+  <p class="hint" style="margin-top:18px">Placed an order on another phone or browser? Open its order link (it's on the page you saw after paying), and it will be added here.</p>
+</main>
+<footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
+<script type="module">
+import { $, api, header, usd, esc, STATUS, myOrders } from '/common.js';
+header('orders');
+
+const saved = myOrders.list();
+if (!saved.length) {
+  $('#list').innerHTML = `<div class="card" style="text-align:center;padding:30px">
+    <div style="font-size:40px">🛍️</div><h3>No orders yet</h3>
+    <p class="hint">When you buy something, or the AI agent prepares a checkout for you, it appears here.</p>
+    <a class="btn btn-primary" href="/store">Go to the shop</a></div>`;
+} else {
+  const rows = await Promise.all(saved.map(async (s) => {
+    try { return { s, o: (await api(`/api/orders/${encodeURIComponent(s.id)}`)).order }; } catch { return { s, o: null }; }
+  }));
+  $('#list').innerHTML = rows.map(({ s, o }) => {
+    if (!o) return `<div class="orow"><div></div><div><h3>${esc(s.title || s.id)}</h3><div class="hint">This order could not be found.</div></div></div>`;
+    const st = STATUS[o.status] || { label: o.status, cls: '' };
+    const needsApproval = o.status === 'CREATED' && s.approveUrl;
+    return `<div class="orow">
+      <img src="${esc(o.productImage || '')}" alt="" />
+      <div>
+        <h3>${esc(o.title)}</h3>
+        <div><b>${usd(o.amount)}</b> ${o.negotiated ? `<s class="hint">${usd(o.listAmount)}</s>` : ''} · <span class="pill ${st.cls}">${esc(st.label)}</span> ${o.channel === 'ai-agent' ? '<span class="pill agent">via AI agent</span>' : ''}</div>
+        <div class="hint" style="margin-top:4px">${esc(o.statusText)}${o.trackingNumber ? ` · Tracking ${esc(o.trackingNumber)}` : ''}</div>
+      </div>
+      <div class="acts">
+        ${needsApproval ? `<a class="btn btn-pp btn-sm" href="${esc(s.approveUrl)}">Approve on PayPal</a>` : ''}
+        <a class="btn ${needsApproval ? 'btn-ghost' : 'btn-primary'} btn-sm" href="/o/${encodeURIComponent(o.orderId)}">${o.status === 'FLAGGED' ? 'Review &amp; decide' : 'Open order'}</a>
+      </div>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

@@ -12,8 +12,10 @@
 </main>
 <footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
 <script type="module">
-import { $, api, header, usd, esc, STATUS, verdictHtml } from '/common.js';
-header('store');
+import { $, api, header, usd, esc, STATUS, verdictHtml, myOrders } from '/common.js';
+header('orders');
+// The seller opens orders from the dashboard; don't add those to "My orders".
+const fromSeller = /\/dashboard/.test(document.referrer) && !new URLSearchParams(location.search).get('new');
 const id = decodeURIComponent(location.pathname.split('/').pop());
 const q = new URLSearchParams(location.search);
 let timer, last;
@@ -40,6 +42,7 @@ async function load() {
     const snap = JSON.stringify(o);
     if (snap === last) { timer = setTimeout(load, 5000); return; }
     last = snap;
+    if (!fromSeller) myOrders.add({ id: o.orderId, title: o.title, amount: o.amount });
     const st = STATUS[o.status] || { label: o.status, cls: '' };
     const v = o.verifications?.[0];
     const canCancel = o.status === 'FLAGGED';
@@ -49,6 +52,9 @@ async function load() {
       <div class="eyebrow">Order ${esc(o.orderId)}</div>
       <h1 style="font-size:34px">${esc(o.title)}</h1>
       <p class="lead" style="margin-bottom:16px"><b>${usd(o.amount)}</b> ${o.negotiated ? `<s class="hint">${usd(o.listAmount)}</s> ` : ''}· <span class="pill ${st.cls}">${esc(st.label)}</span> ${o.channel === 'ai-agent' ? '<span class="pill agent">Bought by AI agent, approved by you</span>' : ''}</p>
+      ${fromSeller ? '' : `<div class="savelink" style="margin:-4px 0 18px"><span>🔖 <b>Save this link</b> to follow your order. It's also under <a href="/orders">My orders</a> on this device.</span>
+        <input id="orderLink" type="text" readonly value="${esc(location.origin + location.pathname)}" aria-label="Link to this order" />
+        <button class="btn btn-ghost btn-sm" id="copyLink" type="button">Copy link</button></div>`}
       <div class="grid2">
         <section class="card">
           <h3>Where your money is</h3>
@@ -63,6 +69,10 @@ async function load() {
           ${o.verifications?.length > 1 ? `<details style="margin-top:12px"><summary style="cursor:pointer">Earlier checks (${o.verifications.length - 1})</summary>${o.verifications.slice(1).map(verdictHtml).join('<hr>')}</details>` : ''}
         </section>
       </div>`;
+    $('#copyLink')?.addEventListener('click', async (e) => {
+      try { await navigator.clipboard.writeText($('#orderLink').value); e.target.textContent = 'Copied'; }
+      catch { $('#orderLink').select(); }
+    });
     $('#cancel')?.addEventListener('click', async (e) => {
       e.target.disabled = true;
       try { await api(`/api/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: JSON.stringify({ by: 'buyer' }) }); load(); }

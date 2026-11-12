@@ -376,7 +376,9 @@ app.get('/', page('index.html'));
 app.get('/store', page('store.html'));
 app.get('/p/:id', page('product.html'));
 app.get('/dashboard', page('dashboard.html'));
-app.get('/agent', page('agent.html'));
+// The agent now lives inside the Shop page; keep the old link working.
+app.get('/agent', (_req, res) => res.redirect(301, '/store#agent'));
+app.get('/orders', page('orders.html'));
 app.get('/thanks', (req, res) => res.redirect(`/o/${encodeURIComponent(String(req.query.order || ''))}`));
 app.get('/o/:id', page('order.html'));
 app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
