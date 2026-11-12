@@ -283,3 +283,56 @@ dialog.sheet .x { float: right; background: none; border: 0; font-size: 22px; cu
   .scard .badge { font-size: 11px; padding: 3px 8px; top: 8px; }
   .scard .badge.cat { display: none; }
 }
+
+/* ---------- Haggle spotlight ---------- */
+.scard { transition: transform .3s ease, box-shadow .3s ease, filter .35s ease, opacity .35s ease; }
+.products.spotlight-on .scard:not(.is-haggling) { filter: grayscale(.9) blur(.4px); opacity: .38; transform: scale(.97); pointer-events: none; }
+.scard.is-haggling { position: relative; z-index: 2; transform: translateY(-6px) scale(1.03); border-color: var(--gold); animation: haggleGlow 1.6s ease-in-out infinite; }
+@keyframes haggleGlow {
+  0%, 100% { box-shadow: 0 0 0 3px var(--gold), 0 0 0 9px rgba(232,163,23,.18), 0 22px 44px rgba(29,27,22,.22); }
+  50% { box-shadow: 0 0 0 3px var(--gold), 0 0 0 16px rgba(232,163,23,.06), 0 22px 44px rgba(29,27,22,.22); }
+}
+.scard.deal-ok { box-shadow: 0 0 0 3px var(--green-2), 0 18px 38px rgba(15,76,58,.22); border-color: var(--green-2); }
+.scard .live { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.scard .live:empty { display: none; }
+.scard.is-haggling .live, .scard.deal-ok .live, .scard.deal-no .live { background: rgba(13,27,21,.88); color: #fff; border-radius: 12px; padding: 9px 11px; box-shadow: 0 8px 22px rgba(0,0,0,.3); animation: pop .3s ease; }
+.lv-head { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #ffd27a; }
+.lv-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff6b4a; box-shadow: 0 0 0 0 rgba(255,107,74,.7); animation: livePulse 1.2s infinite; }
+@keyframes livePulse { 70% { box-shadow: 0 0 0 7px rgba(255,107,74,0); } 100% { box-shadow: 0 0 0 0 rgba(255,107,74,0); } }
+.lv-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.lv-row span { opacity: .8; }
+.lv-row b { font-family: 'Bricolage Grotesque', sans-serif; font-size: 18px; }
+.lv-row[data-buyer] b { color: #b9bdff; }
+.lv-row.bump b { animation: bump .45s ease; }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.28); color: #ffd27a; } 100% { transform: scale(1); } }
+.lv-deal { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 19px; color: #7ff0b8; }
+.lv-deal.no { color: #ffb4a3; }
+.lv-deal s { font-family: Inter, sans-serif; font-weight: 400; font-size: 13px; opacity: .65; margin-left: 4px; color: #fff; }
+.lv-hint { font-size: 12px; opacity: .8; }
+.scard [data-haggle][disabled] { opacity: .5; cursor: not-allowed; }
+.scard.is-haggling [data-haggle][disabled] { opacity: 1; background: #fff4d6; border-color: var(--gold); color: #6e4e00; }
+
+/* Floating bar on small screens */
+.haggle-dock { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: none; align-items: center; gap: 10px; padding: 10px; border-radius: 16px; background: rgba(13,27,21,.95); color: #fff; box-shadow: 0 12px 34px rgba(0,0,0,.35); transform: translateY(140%); transition: transform .35s ease; border: 2px solid var(--gold); }
+.haggle-dock.done { border-color: var(--green-2); }
+.haggle-dock img { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+.haggle-dock .dk-text { flex: 1; min-width: 0; }
+.haggle-dock .dk-title { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.haggle-dock .dk-sub { font-size: 13px; opacity: .9; }
+.haggle-dock .dk-sub b { color: #ffd27a; }
+.haggle-dock.done .dk-sub b { color: #7ff0b8; }
+@media (max-width: 980px) { .haggle-dock { display: flex; } .haggle-dock.on { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .scard, .scard.is-haggling, .lv-dot, .lv-row.bump b, .haggle-dock { animation: none !important; transition: none !important; }
+}
+/* Spotlighted card: the live panel replaces the badges */
+.scard.is-haggling .badge, .scard.deal-ok .badge, .scard.deal-no .badge { opacity: 0; transition: opacity .2s; }
+@media (max-width: 560px) {
+  .scard .live { left: 6px; right: 6px; bottom: 6px; }
+  .scard.is-haggling .live, .scard.deal-ok .live, .scard.deal-no .live { padding: 7px 8px; }
+  .lv-head { font-size: 10px; }
+  .lv-row { font-size: 12px; }
+  .lv-row b { font-size: 16px; }
+  .lv-deal { font-size: 16px; }
+  .scard.is-haggling { transform: translateY(-4px) scale(1.02); }
+}

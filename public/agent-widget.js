@@ -1,6 +1,6 @@
 // The AI shopping agent as a panel that lives inside the Shop page.
 // Streams tool steps and the haggle live from POST /api/agent/chat (SSE).
-import { api, usd, esc, myOrders } from '/common.js';
+import { api, usd, esc, myOrders } from '/common.js?v=4';
 
 export function mountAgent(root) {
   root.innerHTML = `
@@ -31,7 +31,9 @@ export function mountAgent(root) {
   api('/.well-known/agent-store.json').then((m) => { $('[data-cap]').textContent = usd(m.payments.maxAgentOrderUsd); }).catch(() => {});
 
   const history = [];
-  let firstTrail = true, haggleBox = null, steps = 0;
+  let firstTrail = true, haggleBox = null, steps = 0, busy = false;
+  // Lets the page react (spotlight the item being haggled, disable buttons).
+  const emit = (type, detail) => root.dispatchEvent(new CustomEvent(type, { detail }));
   const running = new Map();
   const scroll = () => { msgs.scrollTop = msgs.scrollHeight; };
 
@@ -56,6 +58,7 @@ export function mountAgent(root) {
   }
 
   function onStep(step) {
+    emit('agent:step', step);
     const trail = $('[data-trail]');
     if (firstTrail) { trail.innerHTML = ''; firstTrail = false; }
     const key = step.tool + JSON.stringify(step.args);
@@ -97,6 +100,7 @@ export function mountAgent(root) {
       haggleBox.appendChild(d);
       haggleBox = null;
     }
+    emit('agent:haggle', e);
     scroll();
   }
 
@@ -150,11 +154,24 @@ export function mountAgent(root) {
     } catch (e) {
       thinking.textContent = `Sorry, something went wrong: ${e.message}`;
     } finally {
+      busy = false;
       $('[data-send]').disabled = false;
+      root.querySelectorAll('[data-chips] .chip').forEach((c) => (c.disabled = false));
+      emit('agent:busy', false);
     }
   }
 
-  $('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); send($('[data-input]').value); });
-  $('[data-chips]').addEventListener('click', (e) => { if (e.target.classList.contains('chip')) send(e.target.textContent); });
-  return { send, focus: () => $('[data-input]').focus() };
+  // One request at a time: a second one would talk over the first.
+  function guardedSend(text) {
+    if (busy || !text.trim()) return false;
+    busy = true;
+    root.querySelectorAll('[data-chips] .chip').forEach((c) => (c.disabled = true));
+    emit('agent:busy', true);
+    send(text);
+    return true;
+  }
+
+  $('[data-form]').addEventListener('submit', (e) => { e.preventDefault(); guardedSend($('[data-input]').value); });
+  $('[data-chips]').addEventListener('click', (e) => { if (e.target.classList.contains('chip')) guardedSend(e.target.textContent); });
+  return { send: guardedSend, focus: () => $('[data-input]').focus(), get busy() { return busy; } };
 }

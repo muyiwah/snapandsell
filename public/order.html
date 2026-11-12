@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Your order · Snap &amp; Sell</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
 <main>
@@ -12,7 +12,7 @@
 </main>
 <footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
 <script type="module">
-import { $, api, header, usd, esc, STATUS, verdictHtml, myOrders } from '/common.js';
+import { $, api, header, usd, esc, STATUS, verdictHtml, myOrders } from '/common.js?v=4';
 header('orders');
 // The seller opens orders from the dashboard; don't add those to "My orders".
 const fromSeller = /\/dashboard/.test(document.referrer) && !new URLSearchParams(location.search).get('new');

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Seller dashboard · Snap &amp; Sell</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
   <script src="/vendor/ag-grid-community.min.js"></script>
   <style>
     .gridbox { width: 100%; } .gridbox .ag-center-cols-viewport { min-height: 90px; }
@@ -107,7 +107,7 @@
 </dialog>
 
 <script type="module">
-import { $, api, header, usd, esc, STATUS, verdictHtml } from '/common.js';
+import { $, api, header, usd, esc, STATUS, verdictHtml } from '/common.js?v=4';
 header('dashboard');
 
 const money = (p) => (p.value == null ? '' : usd(p.value));

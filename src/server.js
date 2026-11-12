@@ -385,7 +385,11 @@ app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
 app.get('/vendor/ag-grid-community.min.js', (_req, res) =>
   res.sendFile(path.join(root, 'node_modules', 'ag-grid-community', 'dist', 'ag-grid-community.min.js')),
 );
-app.use(express.static(path.join(root, 'public'), { maxAge: '1h' }));
+// Code and styles revalidate on every load (ETag), so updates show immediately; images cache for an hour.
+app.use(express.static(path.join(root, 'public'), {
+  maxAge: '1h',
+  setHeaders: (res, file) => { if (/\.(css|js|html)$/.test(file)) res.setHeader('Cache-Control', 'no-cache'); },
+}));
 
 // Listen when run directly (`node src/server.js`) or under PM2 (whose wrapper is argv[1]);
 // tests import `app` and listen themselves.

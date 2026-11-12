@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Shop · Snap &amp; Sell</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
 <main>
@@ -22,18 +22,19 @@
 </main>
 <footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
 <script type="module">
-import { $, api, header, usd, esc } from '/common.js';
-import { mountAgent } from '/agent-widget.js';
+import { $, api, header, usd, esc } from '/common.js?v=4';
+import { mountAgent } from '/agent-widget.js?v=4';
 header('store');
 const agent = mountAgent($('#agent'));
 
 const { products } = await api('/api/products');
 $('#grid').innerHTML = products.length ? products.map((p) => `
-  <article class="scard">
+  <article class="scard" data-id="${p.id}">
     <a href="/p/${p.id}" class="media" tabindex="-1" aria-hidden="true">
       <img src="${esc(p.imageUrl ? new URL(p.imageUrl).pathname : '')}" alt="" loading="lazy" />
       <span class="badge cat">${esc(p.category)}</span>
       ${p.negotiable ? '<span class="badge hag">🤝 Haggle-able</span>' : ''}
+      <div class="live" aria-hidden="true"></div>
     </a>
     <div class="info">
       <h3><a href="/p/${p.id}">${esc(p.title)}</a></h3>
@@ -49,11 +50,105 @@ $('#grid').innerHTML = products.length ? products.map((p) => `
     </div>
   </article>`).join('') : '<div class="hint">No products yet. <a href="/">List the first one</a>.</div>';
 
-$('#grid').addEventListener('click', (e) => {
+// ---------- spotlight: show which item the agent is haggling ----------
+const grid = $('#grid');
+const cardFor = (title) => { const p = products.find((x) => x.title === title); return p ? grid.querySelector(`.scard[data-id="${p.id}"]`) : null; };
+const narrow = matchMedia('(max-width: 980px)');
+let active = null;   // card being haggled
+let dockTimer;
+
+// Floating bar on small screens, where the chat sits above the products.
+const dock = document.createElement('div');
+dock.className = 'haggle-dock';
+dock.setAttribute('role', 'status');
+dock.innerHTML = '<img alt="" /><div class="dk-text"><div class="dk-title"></div><div class="dk-sub"></div></div><button type="button" class="btn btn-sm btn-gold">Open chat</button>';
+dock.querySelector('button').onclick = () => $('#agent').scrollIntoView({ behavior: 'smooth', block: 'start' });
+document.body.appendChild(dock);
+const showDock = (title, sub, img, done) => {
+  if (!narrow.matches) return;
+  clearTimeout(dockTimer);
+  dock.querySelector('.dk-title').textContent = title;
+  dock.querySelector('.dk-sub').innerHTML = sub;
+  if (img) dock.querySelector('img').src = img;
+  dock.classList.toggle('done', Boolean(done));
+  dock.classList.add('on');
+};
+
+function spotlight(card, listPrice) {
+  clearSpotlight(false);
+  if (!card) return;
+  active = card;
+  grid.classList.add('spotlight-on');
+  card.classList.add('is-haggling');
+  card.querySelector('.live').innerHTML = `<div class="lv-head"><span class="lv-dot"></span>Haggling live</div><div class="lv-row" data-buyer><span>Your agent</span><b>…</b></div><div class="lv-row" data-seller><span>Seller</span><b>${usd(listPrice)}</b></div>`;
+  card.querySelector('[data-haggle]')?.replaceChildren(document.createTextNode('Haggling…'));
+  if (!narrow.matches) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showDock(card.querySelector('h3').textContent, `Haggling live · list ${usd(listPrice)}`, card.querySelector('img').src);
+}
+function offer(e) {
+  if (!active) return;
+  const row = active.querySelector(e.side === 'buyer' ? '[data-buyer]' : '[data-seller]');
+  if (!row) return;
+  row.querySelector('b').textContent = usd(e.offerUsd);
+  row.classList.remove('bump'); void row.offsetWidth; row.classList.add('bump');
+  showDock(active.querySelector('h3').textContent, `${e.side === 'buyer' ? 'Your agent offers' : 'Seller asks'} <b>${usd(e.offerUsd)}</b>${e.accept ? ' · accepted' : ''}`);
+}
+function settle(e) {
+  if (!active) return;
+  const list = products.find((p) => p.id === active.dataset.id)?.priceUsd;
+  active.classList.add(e.agreed ? 'deal-ok' : 'deal-no');
+  active.querySelector('.live').innerHTML = e.agreed
+    ? `<div class="lv-deal">✓ Deal at ${usd(e.priceUsd)} <s>${usd(list)}</s></div><div class="lv-hint">Say “buy it” in the chat</div>`
+    : '<div class="lv-deal no">No deal within budget</div><div class="lv-hint">You can still buy at the list price</div>';
+  showDock(active.querySelector('h3').textContent, e.agreed ? `<b>✓ Deal at ${usd(e.priceUsd)}</b> · say “buy it” in the chat` : 'No deal within your budget', null, e.agreed);
+}
+function clearSpotlight(keepDeal = true) {
+  grid.classList.remove('spotlight-on');
+  grid.querySelectorAll('.scard').forEach((c) => {
+    c.classList.remove('is-haggling');
+    const btn = c.querySelector('[data-haggle]');
+    if (btn) btn.textContent = '🤝 Haggle';
+    // Keep the result on the card that just finished; clear older ones.
+    if (!(keepDeal && c === active && (c.classList.contains('deal-ok') || c.classList.contains('deal-no')))) {
+      c.classList.remove('deal-ok', 'deal-no');
+      c.querySelector('.live').innerHTML = '';
+    }
+  });
+  if (!keepDeal) active = null;
+}
+
+const agentEl = $('#agent');
+const cardById = (id) => grid.querySelector(`.scard[data-id="${CSS.escape(String(id || ''))}"]`);
+// Tool steps: negotiate_price names the product by id, which is the most reliable match.
+agentEl.addEventListener('agent:step', (ev) => {
+  const s = ev.detail;
+  if (s.tool !== 'negotiate_price') return;
+  const card = cardById(s.args?.product_id);
+  if (!('result' in s)) {
+    if (card && card !== active) spotlight(card, products.find((p) => p.id === card.dataset.id)?.priceUsd);
+  } else if (active && !active.classList.contains('deal-ok') && !active.classList.contains('deal-no')) {
+    // Covers a deal reused from earlier (no live haggle) and errors.
+    settle({ agreed: Boolean(s.result?.agreed), priceUsd: s.result?.priceUsd });
+  }
+});
+agentEl.addEventListener('agent:haggle', (ev) => {
+  const e = ev.detail;
+  if (e.type === 'haggle_start') { const c = cardFor(e.productTitle); if (c && c !== active) spotlight(c, e.listPriceUsd); }
+  else if (e.type === 'haggle') offer(e);
+  else if (e.type === 'haggle_end') settle(e);
+});
+agentEl.addEventListener('agent:busy', (ev) => {
+  grid.querySelectorAll('[data-haggle]').forEach((b) => (b.disabled = ev.detail));
+  if (!ev.detail) {
+    clearSpotlight(true);
+    dockTimer = setTimeout(() => dock.classList.remove('on'), 9000);
+  }
+});
+
+grid.addEventListener('click', (e) => {
   const b = e.target.closest('[data-haggle]');
-  if (!b) return;
+  if (!b || agent.busy) return;
   const budget = Math.floor(Number(b.dataset.price) * 0.92);
-  $('#agent').scrollIntoView({ behavior: 'smooth', block: 'start' });
   agent.send(`Get me a deal on the ${b.dataset.haggle}, my max is $${budget}`);
 });
 // Arriving from a product page's "let the AI agent haggle" link.

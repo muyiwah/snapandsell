@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Checkout · Snap &amp; Sell</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
 <main>
@@ -32,7 +32,7 @@
 </main>
 <footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
 <script type="module">
-import { $, api, header, usd, esc, getConfig } from '/common.js';
+import { $, api, header, usd, esc, getConfig } from '/common.js?v=4';
 header('store');
 const id = location.pathname.split('/').pop();
 const params = new URLSearchParams(location.search);

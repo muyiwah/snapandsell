@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Payment · Snap &amp; Sell</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
 <main>
   <div class="card success" style="max-width:520px;margin:20px auto" id="box"><div class="spinner dark" style="margin:20px auto"></div></div>
 </main>
 <script type="module">
-import { $, api, header, usd, esc } from '/common.js';
+import { $, api, header, usd, esc } from '/common.js?v=4';
 header('store');
 const q = new URLSearchParams(location.search);
 const id = q.get('order');

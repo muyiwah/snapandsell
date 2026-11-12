@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>My orders · Snap &amp; Sell</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
 <main style="max-width:860px">
@@ -16,7 +16,7 @@
 </main>
 <footer>PayPal sandbox · test buyers only · Demo sellers are fictional</footer>
 <script type="module">
-import { $, api, header, usd, esc, STATUS, myOrders } from '/common.js';
+import { $, api, header, usd, esc, STATUS, myOrders } from '/common.js?v=4';
 header('orders');
 
 const saved = myOrders.list();
