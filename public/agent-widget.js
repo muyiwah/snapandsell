@@ -35,7 +35,9 @@ export function mountAgent(root) {
   // Lets the page react (spotlight the item being haggled, disable buttons).
   const emit = (type, detail) => root.dispatchEvent(new CustomEvent(type, { detail }));
   const running = new Map();
-  const scroll = () => { msgs.scrollTop = msgs.scrollHeight; };
+  // Follow the newest message after layout (rAF), smoothly unless the user prefers less motion.
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scroll = () => requestAnimationFrame(() => msgs.scrollTo({ top: msgs.scrollHeight, behavior: reduce ? 'auto' : 'smooth' }));
 
   function addMsg(role, text) {
     const div = document.createElement('div');

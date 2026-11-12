@@ -336,3 +336,18 @@ dialog.sheet .x { float: right; background: none; border: 0; font-size: 22px; cu
   .lv-deal { font-size: 16px; }
   .scard.is-haggling { transform: translateY(-4px) scale(1.02); }
 }
+
+/* ---------- Agent panel: one screen tall on desktop; only the conversation scrolls ---------- */
+@media (min-width: 981px) {
+  .agentpanel { position: sticky; top: 76px; height: calc(100vh - 96px); max-height: 900px; overflow: hidden; }
+  .agentpanel .agent-head, .agentpanel .chips, .agentpanel .composer, .agentpanel .trailbox { flex-shrink: 0; }
+  .agentpanel .msgs { flex: 1 1 auto; min-height: 0; height: auto; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+  .agentpanel .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .agentpanel .chips::-webkit-scrollbar { display: none; }
+  .agentpanel .chip { white-space: nowrap; flex-shrink: 0; }
+  .agentpanel .trailbox[open] .trail { max-height: 150px; }
+  .agentpanel .agent-head .hint { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
+/* Subtle scrollbar for the conversation */
+.agentpanel .msgs::-webkit-scrollbar { width: 8px; }
+.agentpanel .msgs::-webkit-scrollbar-thumb { background: #e0d5c1; border-radius: 4px; }
