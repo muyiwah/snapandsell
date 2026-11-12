@@ -206,3 +206,14 @@ dialog.sheet .x { float: right; background: none; border: 0; font-size: 22px; cu
 .pcard .pill { align-self: flex-start; }
 .ag-cell .pill { line-height: 1.5; vertical-align: middle; }
 .ag-cell { display: flex; align-items: center; }
+
+/* ---------- phones: compact header, one-row swipeable nav ---------- */
+@media (max-width: 720px) {
+  .top { position: static; }
+  .top-inner { padding: 10px 16px; gap: 6px; }
+  .brand { font-size: 18px; }
+  .nav { margin-left: 0; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; font-size: 14px; padding: 6px 10px; }
+  main { padding-top: 18px; }
+}

@@ -23,7 +23,16 @@
     .ai { display: inline-flex; gap: 6px; align-items: center; }
     .bar { width: 46px; height: 6px; border-radius: 3px; background: #e6dccb; overflow: hidden; display: inline-block; }
     .bar i { display: block; height: 100%; }
-    @media (max-width: 720px) { .gridtools { margin-left: 0; width: 100%; } .gridtools input { flex: 1; width: auto; } }
+    @media (max-width: 720px) {
+      .gridhead { gap: 10px; }
+      .gridhead h3 { width: 100%; }
+      .gridtools { margin-left: 0; width: 100%; }
+      .gridtools input { flex: 1; width: auto; min-width: 0; }
+      .gridtools .btn { white-space: nowrap; padding: 7px 12px; }
+      .chip { font-size: 13px; padding: 5px 10px; }
+      .card { padding: 14px; }
+      .actcell .btn { padding: 6px 10px; font-size: 13px; }
+    }
   </style>
 </head>
 <body>
@@ -44,8 +53,8 @@
       <h3 style="margin:0">Orders</h3>
       <div class="chips" id="statusChips" role="tablist" aria-label="Filter orders by status"></div>
       <div class="gridtools">
-        <input id="orderSearch" type="text" placeholder="Search orders, tracking, PayPal ID…" aria-label="Search orders" />
-        <button class="btn btn-ghost btn-sm" id="exportCsv" type="button">Export CSV</button>
+        <input id="orderSearch" type="search" placeholder="Search orders…" aria-label="Search orders, tracking numbers or PayPal IDs" />
+        <button class="btn btn-ghost btn-sm" id="exportCsv" type="button">CSV ↓</button>
       </div>
     </div>
     <div id="orders" class="ag-theme-quartz gridbox"></div>
@@ -103,19 +112,26 @@ const pill = (text, cls) => { const s = document.createElement('span'); s.classN
 const statusPill = (p) => { const s = STATUS[p.value] || { label: p.value, cls: '' }; return pill(s.label, s.cls); };
 const channelPill = (p) => pill({ 'ai-agent': 'AI agent', web: 'PayPal button', 'qr-link': 'QR / link' }[p.value] || p.value, p.value === 'ai-agent' ? 'agent' : '');
 const when = (p) => (p.value ? new Date(p.value).toLocaleString() : '');
+const phoneMq = matchMedia('(max-width: 720px)');
+const isPhone = () => phoneMq.matches;
 const actions = (p) => {
   const o = p.data;
   const wrap = document.createElement('div');
+  wrap.className = 'actcell';
   wrap.style.display = 'flex'; wrap.style.gap = '6px'; wrap.style.alignItems = 'center'; wrap.style.height = '100%';
   if (o.status === 'HELD' || o.status === 'FLAGGED') {
     const b = document.createElement('button');
     b.className = 'btn btn-gold btn-sm';
-    b.textContent = o.status === 'FLAGGED' ? 'Retry proof' : 'Ship & get paid';
+    b.textContent = o.status === 'FLAGGED' ? (isPhone() ? 'Retry' : 'Retry proof') : (isPhone() ? 'Ship' : 'Ship & get paid');
+    b.setAttribute('aria-label', o.status === 'FLAGGED' ? `Retry proof of shipment for ${o.productTitle}` : `Ship and get paid for ${o.productTitle}`);
     b.onclick = () => openShip(o);
     wrap.appendChild(b);
   }
+  // On phones each row gets one button; the order page is one tap away from "View" on finished orders.
+  if (isPhone() && wrap.children.length) return wrap;
   const a = document.createElement('a');
   a.href = `/o/${encodeURIComponent(o.id)}`; a.target = '_blank'; a.textContent = 'View'; a.className = 'btn btn-ghost btn-sm';
+  a.setAttribute('aria-label', `View order for ${o.productTitle}`);
   wrap.appendChild(a);
   return wrap;
 };
@@ -141,7 +157,7 @@ let allOrders = [];
 
 const ordersGrid = agGrid.createGrid($('#orders'), {
   columnDefs: [
-    { headerName: '', cellRenderer: (p) => (p.node.rowPinned ? '' : actions(p)), width: 200, sortable: false, filter: false, pinned: 'left' },
+    { headerName: '', colId: 'actions', cellRenderer: (p) => (p.node.rowPinned ? '' : actions(p)), width: 200, sortable: false, filter: false, pinned: 'left' },
     { field: 'status', headerName: 'Status', cellRenderer: (p) => (p.node.rowPinned ? p.value : statusPill(p)), width: 150, filter: 'agTextColumnFilter' },
     { field: 'productTitle', headerName: 'Product', flex: 1, minWidth: 200, filter: 'agTextColumnFilter', tooltipField: 'productTitle' },
     { field: 'amount', headerName: 'Amount', valueFormatter: money, width: 110, filter: 'agNumberColumnFilter', enableCellChangeFlash: true },
@@ -235,6 +251,21 @@ const productsGrid = agGrid.createGrid($('#products'), {
     }
   },
 });
+
+// ---------- responsive layout: fewer, narrower columns on phones ----------
+const PHONE_HIDDEN_ORDERS = ['saved', 'hold', 'channel', 'tracking.trackingNumber', 'createdAt', 'id'];
+function applyLayout() {
+  const phone = isPhone();
+  // defaultColDef first: setting it re-applies column definitions.
+  ordersGrid.setGridOption('defaultColDef', { sortable: true, resizable: true, floatingFilter: !phone, suppressHeaderMenuButton: true });
+  ordersGrid.setColumnsVisible(PHONE_HIDDEN_ORDERS, !phone);
+  ordersGrid.setColumnsPinned(['actions'], phone ? null : 'left');
+  ordersGrid.setColumnWidths([{ key: 'actions', newWidth: phone ? 84 : 200 }, { key: 'status', newWidth: phone ? 146 : 150 }, { key: 'ai', newWidth: phone ? 190 : 230 }]);
+  ordersGrid.refreshCells({ columns: ['actions'], force: true });
+  productsGrid.setColumnsVisible(['sellerName'], !phone);
+}
+applyLayout();
+phoneMq.addEventListener('change', applyLayout);
 
 const agentTag = (e) => (e.channel === 'ai-agent' ? ' <span class="pill agent">AI agent</span>' : '');
 const label = {
